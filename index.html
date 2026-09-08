@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Sistema Solar MR — WebXR / Meta Quest 3</title>
+
+  <!-- PWA: permite INSTALAR la demo en el Meta Quest 3 y usarla sin conexión -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#06070d" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <style>
+    :root {
+      --bg: #06070d;
+      --fg: #eef2ff;
+      --muted: #9aa3c0;
+      --accent: #4cc2ff;
+      --ok: #55d98a;
+      --warn: #ffcc55;
+      --err: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    canvas { display: block; }
+
+    /* ---- Overlay 2D (también usado como dom-overlay dentro de la sesión XR) ---- */
+    #overlay {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    #overlay.in-session { align-items: flex-start; justify-content: center; }
+
+    #panel {
+      pointer-events: auto;
+      width: min(560px, 92vw);
+      background: rgba(10, 13, 26, 0.92);
+      border: 1px solid rgba(120, 160, 255, 0.25);
+      border-radius: 18px;
+      padding: 22px 24px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 20px 60px rgba(0,0,0,.55);
+    }
+    #overlay.in-session #panel,
+    #overlay.panel-hidden #panel { display: none; }
+
+    /* Pastilla para volver a mostrar el panel de estado */
+    #panel-restore {
+      position: fixed; top: 16px; right: 16px; z-index: 11;
+      display: none; pointer-events: auto; cursor: pointer;
+      align-items: center; gap: 8px;
+      background: rgba(10, 13, 26, 0.85);
+      border: 1px solid rgba(140, 170, 255, 0.32);
+      color: var(--fg); font-size: 13px; font-weight: 600;
+      padding: 9px 16px; border-radius: 999px;
+      backdrop-filter: blur(6px);
+    }
+    #panel-restore:hover { border-color: rgba(180, 210, 255, .7); }
+    #overlay.panel-hidden #panel-restore { display: inline-flex; }
+    #overlay.in-session #panel-restore { display: none !important; }
+
+    h1 { margin: 0 0 4px; font-size: 20px; letter-spacing: .2px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+
+    #caps { list-style: none; margin: 0 0 16px; padding: 0; font-size: 13px; }
+    #caps li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; color: var(--muted); }
+    #caps .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; flex: 0 0 8px; }
+    #caps li.ok .dot { background: var(--ok); }
+    #caps li.warn .dot { background: var(--warn); }
+    #caps li.err .dot { background: var(--err); }
+    #caps li.ok, #caps li.warn { color: var(--fg); }
+    #caps li.err { color: var(--err); }
+
+    .buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    button.primary {
+      pointer-events: auto;
+      appearance: none; border: 0; cursor: pointer;
+      background: linear-gradient(180deg, #37a9ee, #1f7fc4);
+      color: #fff; font-size: 15px; font-weight: 600;
+      padding: 12px 20px; border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(31,127,196,.35);
+    }
+    button.primary:disabled { background: #2a3145; color: #6c7590; cursor: not-allowed; box-shadow: none; }
+    button.ghost {
+      pointer-events: auto; appearance: none; cursor: pointer;
+      background: transparent; color: var(--fg);
+      border: 1px solid rgba(140,170,255,.35); border-radius: 12px;
+      padding: 12px 18px; font-size: 14px;
+    }
+
+    #message { margin-top: 14px; font-size: 13px; line-height: 1.5; color: var(--warn); white-space: pre-line; }
+    #message.error { color: var(--err); }
+
+    .hint { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .hint b { color: #cfe0ff; font-weight: 600; }
+
+    /* HUD mínimo dentro de la sesión XR (dom-overlay) */
+    #xr-hud {
+      display: none; pointer-events: none;
+      margin-top: 14px; padding: 8px 14px; border-radius: 999px;
+      background: rgba(6,8,16,.55); border: 1px solid rgba(140,170,255,.22);
+      font-size: 13px; color: #dbe6ff;
+    }
+    #overlay.in-session #xr-hud { display: block; }
+
+    #loader { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+      background: var(--bg); color: var(--muted); font-size: 14px; letter-spacing: .3px; }
+    #loader.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="loader">Generando texturas y construyendo el Sistema Solar…</div>
+
+  <div id="overlay">
+    <div id="panel">
+      <h1>Sistema Solar en Realidad Mixta</h1>
+      <div class="sub">WebXR · Hand Tracking · Meta Quest 3</div>
+
+      <ul id="caps">
+        <li id="cap-secure"><span class="dot"></span><span>Contexto seguro (HTTPS)</span></li>
+        <li id="cap-webxr"><span class="dot"></span><span>API WebXR</span></li>
+        <li id="cap-ar"><span class="dot"></span><span>Sesión immersive-ar (passthrough / MR)</span></li>
+        <li id="cap-vr"><span class="dot"></span><span>Sesión immersive-vr (alternativa)</span></li>
+        <li id="cap-hands"><span class="dot"></span><span>Hand tracking</span></li>
+      </ul>
+
+      <div class="buttons">
+        <button id="btn-ar" class="primary" disabled>Entrar en Realidad Mixta</button>
+        <button id="btn-vr" class="ghost" style="display:none">Entrar en VR</button>
+        <button id="btn-install" class="ghost" style="display:none">Instalar en el visor</button>
+        <button id="btn-hide" class="ghost">Ocultar panel</button>
+      </div>
+
+      <div id="message"></div>
+
+      <div class="hint">
+        <b>En el visor:</b> mirá el sistema a tu alrededor. Tocá un planeta con la mano para
+        congelar su rotación y verlo seleccionado; pellizcá (índice + pulgar) para agarrarlo y moverlo;
+        soltá y volverá solo a su órbita. Agarrá el mismo planeta con las dos manos y separalas para
+        escalarlo. Poné la <b>palma derecha hacia arriba</b> para abrir el menú.<br />
+        <b>En PC (sin visor):</b> arrastrá para orbitar la cámara, rueda para zoom, clic en un planeta
+        para ver su ficha, tecla <b>M</b> para el menú y <b>R</b> para reiniciar.
+        Con <b>H</b> (o «Ocultar panel») sacás este cartel de en medio y lo recuperás
+        desde la pastilla de arriba a la derecha.
+      </div>
+    </div>
+
+    <div id="xr-hud">Palma derecha hacia arriba → menú</div>
+
+    <button id="panel-restore" title="Volver a mostrar el panel (tecla H)">
+      ⓘ&nbsp; Estado y opciones
+    </button>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
