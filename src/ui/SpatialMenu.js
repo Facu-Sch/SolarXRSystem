@@ -35,6 +35,7 @@ export class SpatialMenu extends CanvasPanel {
       showInfo: true,
       showStars: true,
       allMoons: false,
+      audioOn: true,
       scales: [0.5, 1, 1.5, 2.5],
       scaleIndex: 1,
       orbitScales: [1, 1.5, 2, 3],
@@ -113,18 +114,19 @@ export class SpatialMenu extends CanvasPanel {
     // ---- Fila 3: visualización ---------------------------------------------
     this._sectionTitle('Visualización', PAD + 4, 322);
     const rowY3 = 340;
-    const bw3 = (W - PAD * 2 - 16 * 4) / 5;
+    const bw3 = (W - PAD * 2 - 14 * 5) / 6;
     const toggles = [
       { id: 'toggle-orbits', label: 'Órbitas', sub: s.showOrbits ? 'visibles' : 'ocultas', on: s.showOrbits },
       { id: 'toggle-labels', label: 'Nombres', sub: s.showLabels ? 'visibles' : 'ocultos', on: s.showLabels },
       { id: 'toggle-info', label: 'Fichas', sub: s.showInfo ? 'activas' : 'off', on: s.showInfo },
       { id: 'toggle-stars', label: 'Estrellas', sub: s.showStars ? 'visibles' : 'ocultas', on: s.showStars },
-      { id: 'toggle-moons', label: 'Lunas', sub: s.allMoons ? 'todas' : 'sólo la Luna', on: s.allMoons }
+      { id: 'toggle-moons', label: 'Lunas', sub: s.allMoons ? 'todas' : 'sólo la Luna', on: s.allMoons },
+      { id: 'toggle-audio', label: 'Sonido', sub: s.audioOn ? 'activado' : 'silencio', on: s.audioOn }
     ];
     toggles.forEach((t, i) => {
       this._button({
-        id: t.id, x: PAD + i * (bw3 + 16), y: rowY3, w: bw3, h: 76,
-        label: t.label, sub: t.sub, active: t.on, fontSize: 25
+        id: t.id, x: PAD + i * (bw3 + 14), y: rowY3, w: bw3, h: 76,
+        label: t.label, sub: t.sub, active: t.on, fontSize: 23
       });
     });
 

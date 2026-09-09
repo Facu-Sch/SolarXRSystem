@@ -66,6 +66,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // nada de terceros
 
+  // El audio se sirve por rangos (peticiones Range -> respuestas 206), que no
+  // se pueden guardar en la Cache API. Se deja pasar directo a la red para no
+  // romper la reproducción ni ensuciar la caché.
+  if (req.headers.has('range') || /\.(mp3|ogg|wav|m4a)$/i.test(url.pathname)) return;
+
   // --- Navegación: red primero -------------------------------------------
   if (req.mode === 'navigate') {
     event.respondWith((async () => {

@@ -92,6 +92,8 @@
     }
 
     #message { margin-top: 14px; font-size: 13px; line-height: 1.5; color: var(--warn); white-space: pre-line; }
+    #build-id { margin-top: 10px; font-size: 11px; }
+    #build-id { color: #5d6a86; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
     #message.error { color: var(--err); }
 
     .hint { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.55; }
@@ -135,14 +137,16 @@
       </div>
 
       <div id="message"></div>
+      <div id="build-id" title="Versión compilada que estás viendo"></div>
 
       <div class="hint">
         <b>En el visor:</b> mirá el sistema a tu alrededor. Tocá un planeta con la mano para
         congelar su rotación y verlo seleccionado; pellizcá (índice + pulgar) para agarrarlo y moverlo;
         soltá y volverá solo a su órbita. Agarrá el mismo planeta con las dos manos y separalas para
         escalarlo. Poné la <b>palma derecha hacia arriba</b> para abrir el menú.<br />
-        <b>En PC (sin visor):</b> arrastrá para orbitar la cámara, rueda para zoom, clic en un planeta
-        para ver su ficha, tecla <b>M</b> para el menú y <b>R</b> para reiniciar.
+        <b>En PC (sin visor):</b> arrastrá para orbitar la cámara y rueda para zoom;
+        tecla <b>M</b> para el menú y <b>R</b> para reiniciar. Las fichas de los planetas
+        se abren tocándolos con la mano, o sea sólo dentro del visor.
         Con <b>H</b> (o «Ocultar panel») sacás este cartel de en medio y lo recuperás
         desde la pastilla de arriba a la derecha.
       </div>

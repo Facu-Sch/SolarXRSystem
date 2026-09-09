@@ -103,7 +103,7 @@ export class SpatialUI {
 
     // --- 1) Gesto de apertura ---------------------------------------------
     if (gestures.palmUpTriggered) {
-      const pos = gestures.anchorPosition(hands, new THREE.Vector3());
+      const pos = gestures.anchorPosition(hands, new THREE.Vector3(), this.camera);
       this.openMenuAt(pos);
     }
 

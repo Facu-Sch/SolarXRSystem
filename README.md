@@ -10,9 +10,10 @@ los elementos orbitales reales de la época J2000** publicados por el JPL. Los p
 velocidades, las excentricidades y las inclinaciones son los verdaderos, y lo mismo vale
 para los diámetros, las masas y los períodos de rotación de las fichas.
 
-Hecho con **Three.js + WebXR + Vite**. Sin backend, sin assets binarios, sin analítica: es
-una web estática de un único bundle que además se puede **instalar en el visor** y usar sin
-conexión.
+Hecho con **Three.js + WebXR + Vite**. Sin backend y sin analítica: es una web estática que
+además se puede **instalar en el visor** y usar sin conexión. Las texturas de los planetas
+se generan por código; los únicos archivos binarios son los dos logos institucionales y la
+música de fondo.
 
 ---
 
@@ -52,7 +53,7 @@ avanzar por su órbita y se quede quieto mientras lo mirás, y **Cerrar**.
 
 - **Play / pausa** y **velocidad**: 0,1× · 0,5× · 1× · 5× · 10× · 100×
 - **Reiniciar** todo, o solo **devolver a su órbita** los planetas que moviste
-- Mostrar u ocultar **órbitas, nombres, fichas y estrellas**
+- Mostrar u ocultar **órbitas, nombres, fichas, estrellas** y el **sonido** de fondo
 - **Lunas**: solo la Luna, o las **27 lunas principales** del Sistema Solar
 - **Tamaño de los cuerpos**: 0,5× · 1× · 1,5× · 2,5×
 - **Separación de las órbitas**: 1× · 1,5× · 2× · 2,5×
@@ -60,12 +61,12 @@ avanzar por su órbita y se quede quieto mientras lo mirás, y **Cerrar**.
 
 ### En la computadora, sin visor
 
-Se puede explorar todo con el ratón (la interacción manual, obviamente, necesita el casco):
+Se puede recorrer la escena con el ratón para comprobar la simulación. **Las fichas de los
+cuerpos no se abren desde el escritorio**: eso es exclusivo del visor (ver §2.10).
 
 | Tecla / acción | Efecto |
 |---|---|
 | arrastrar / rueda | orbitar la cámara / zoom |
-| clic en un planeta | abre su ficha |
 | `H` o *Ocultar panel* | pliega el panel de estado para despejar la vista |
 | `Esc` | oculta el panel |
 | `M` | menú espacial |
@@ -74,7 +75,9 @@ Se puede explorar todo con el ratón (la interacción manual, obviamente, necesi
 | `O` / `N` | órbitas / nombres |
 
 El panel de estado se recupera con la pastilla **ⓘ Estado y opciones** de la esquina
-superior derecha.
+superior derecha, y muestra abajo el **sello de compilación** (`versión AAAA-MM-DD hh:mm`).
+Sirve para saber de un vistazo si lo que estás probando es la última versión o una copia
+cacheada o desplegada hace rato.
 
 ---
 
@@ -109,7 +112,19 @@ no parpadee: se cierra por debajo de 28 mm y no se abre hasta pasar los 48 mm.
 **Contacto.** Se comparan seis puntos de la mano (las cinco yemas y la palma) contra la
 esfera de cada cuerpo, usando los **radios reales de las articulaciones** que aporta WebXR
 más 18 mm de holgura. No hay colisionadores gigantes: el planeta no reacciona con la mano a
-un palmo de distancia.
+un palmo de distancia. Cuando varios cuerpos están al alcance gana el de **superficie** más
+próxima, no el de centro más próximo: comparando centros, una luna diminuta le robaba el
+contacto a su planeta aunque la mano estuviera dentro de éste.
+
+No se dibuja ninguna representación de las manos. En passthrough el usuario ya ve las
+suyas, y superponerles marcadores sólo ensucia la vista y tapa los planetas pequeños justo
+cuando va a agarrarlos.
+
+**Seleccionar no es lo mismo que tocar.** Tocar es generoso (radio + 18 mm) porque sólo
+congela la rotación, que es inmediato y reversible. Abrir la ficha es más exigente: la yema
+tiene que estar **dentro** de la esfera del cuerpo —no en el margen— y mantenerse ahí 0,40 s.
+Sin esa distinción, al llevar la mano hacia un planeta se rozaban por el camino todos los
+que quedaban de paso y la ficha iba saltando de uno a otro hasta llegar al destino.
 
 **Agarre.** Con pellizco, o "a mano llena" envolviendo el cuerpo — para esto último hacen
 falta al menos 3 yemas **estrictamente dentro** de la esfera y la mano cerrándose. Es
@@ -161,7 +176,7 @@ ambas con compresión por ley de potencia:
 | | Fórmula | Resultado |
 |---|---|---|
 | **Distancias** | `r = 0,437 · (r_UA)^0,45` m | Mercurio 0,31 m … Neptuno ~2,02 m |
-| **Cuerpos** | `R = 0,023 · (R/R_Tierra)^0,40` m | Tierra 2,3 cm · Júpiter 6,0 cm · Sol 8,3 cm |
+| **Cuerpos** | `R = 0,023 · (R/R_Tierra)^0,40` m | Tierra 2,3 cm · Júpiter 6,0 cm · Sol 15,0 cm |
 | **Satélites** | `r = R_planeta · (1,55 + 0,36 · (a/R_planeta)^0,40)` | Luna a 7,8 cm de la Tierra |
 
 Se comprime **el módulo** del vector de posición conservando la dirección, así que se
@@ -169,6 +184,22 @@ mantienen la forma de la elipse, la inclinación orbital y el orden de los plane
 rango 0,39–39,5 UA (×100) se convierte en 0,31–2,02 m (×6,5). Resultado: **todo el sistema
 cabe en una esfera de ~2 m a tu alrededor**, todo es visible a la vez y todo está al alcance
 de la mano.
+
+#### El Sol y las proporciones
+
+Conviene decirlo claro: **ningún cuerpo está a escala lineal entre sí**. Eso es
+precisamente lo que hace el exponente 0,40 — comprimir el rango. El Sol tiene 109 radios
+terrestres; a proporción verdadera, con la Tierra en 4,6 cm de diámetro, mediría **5 metros
+de diámetro** y se comería la escena entera.
+
+Con la ley de compresión queda en **30 cm de diámetro, 6,5 veces la Tierra** en vez de 109.
+Se conserva el orden y el "quién es más grande que quién", no la proporción numérica.
+
+`BODY.SUN_FACTOR` permite encoger el Sol *además* de la compresión. Está en **1,0**, es
+decir el Sol sigue exactamente el mismo criterio que los planetas, sin excepciones. Deja
+13,4 cm de holgura con Mercurio en su perihelio (verificado en simulación), así que no
+invade ninguna órbita. Bajarlo a 0,55 lo dejaría en 17 cm de diámetro, más discreto en el
+centro de la escena pero rompiendo la coherencia con el resto.
 
 #### Por qué esa relación exacta entre las dos escalas
 
@@ -272,6 +303,67 @@ No es fotorrealismo, pero cada cuerpo es reconocible al instante y el proyecto n
 solo megabyte de assets binarios, no hace peticiones de red y no tiene problemas de CORS ni
 de licencias. Si preferís texturas reales, dejá los ficheros equirectangulares en
 `public/textures/` y rellená `OVERRIDE_URLS` en `src/systems/ProceduralTextures.js`.
+
+### 2.10 Por qué en escritorio no se seleccionan cuerpos
+
+La vista de escritorio sirve para **observar** la escena y comprobar la simulación, no para
+interactuar: no hay selección con el ratón. Es una decisión, no un olvido, y vale la pena
+dejar escrito por qué, porque se intentó de dos maneras distintas y ninguna funcionó.
+
+Con la cámara alejada, un planeta rocoso mide **5-7 píxeles de radio**. Exigir que el rayo
+impacte exactamente sobre él hace que casi todos los clics fallen; y como al fallar no
+pasaba nada, quedaba en pantalla la ficha del último cuerpo acertado, lo que daba la
+impresión de que la aplicación asignaba mal las tarjetas.
+
+El segundo intento fue dar un margen de tolerancia. Peor: el margen hacía que el clic se lo
+quedara un cuerpo vecino, o alguno de los que quedaban de paso entre el cursor y el
+objetivo. Ninguna de las dos opciones era aceptable, y en escritorio la ficha no aporta
+nada que no se pueda leer dentro del visor, que es donde la demo está pensada para usarse.
+
+Lo que sí queda en escritorio: cámara orbital, zoom, el menú espacial con `M` y los demás
+atajos de teclado.
+
+### 2.9 Ambientación: logos en el suelo y sonido
+
+Dos **logos institucionales** (GTI FIUNER y Facultad de Ingeniería de la UNER) se apoyan
+en el suelo real de la habitación, por delante del usuario. Se colocan al recentrar la
+escena, igual que el sistema solar, y viven en `y = 0`, que en el espacio de referencia
+`local-floor` de WebXR coincide con el suelo físico.
+
+Los PNG institucionales vienen con **fondo blanco opaco**, que sobre el suelo real se
+vería como una hoja de papel pegada. Al cargarlos se convierte ese blanco en
+transparencia con un degradado suave (entre el 82 % y el 99 % de luminosidad mínima),
+de modo que se conserva el antialias de los bordes y sólo queda el logo.
+
+Los archivos van en `public/logos/` y son **opcionales**: si falta alguno, ese logo
+simplemente no aparece y se avisa por consola.
+
+| Archivo | Ancho en escena |
+|---|---|
+| `public/logos/gti-fiuner.png` | 0,34 m (cuadrado) |
+| `public/logos/uner-fi.png` | 0,70 m (apaisado 3:1) |
+
+El recorte del blanco **sólo se aplica si el PNG no trae ya transparencia**: se comprueban
+las cuatro esquinas y, si son transparentes, la imagen se usa tal cual. Si no, se borrarían
+los blancos legítimos del propio logo — los reflejos de las gafas o los huecos del
+engranaje.
+
+El **sonido ambiental** (`public/audio/ambient-neptune.mp3`, 12 minutos, mono 32 kbps,
+2,8 MB) suena en bucle continuo. Se
+reproduce con un `<audio>` del DOM y no con `THREE.Audio`, porque es un fondo constante y
+no un sonido situado en un punto: así se evita el coste de la espacialización y de
+mantener un `AudioListener` pegado a la cámara XR.
+
+Los navegadores no permiten reproducir audio sin una interacción previa del usuario, así
+que no se intenta al cargar la página: arranca al primer clic, tecla o al entrar en la
+sesión XR, con un fundido de 1,6 s. Si el navegador aun así lo rechaza, se reintenta en la
+siguiente interacción en lugar de fallar en silencio. Se silencia desde el botón
+**Sonido** del menú.
+
+El service worker **no cachea** el audio: los navegadores lo piden por rangos (peticiones
+`Range`, respuestas 206) y esas respuestas no se pueden guardar en la Cache API. Eso
+significa que el sonido es lo único que necesita conexión; el resto de la demo funciona
+sin red.
 
 ---
 
@@ -381,7 +473,9 @@ aplicaciones, pantalla completa y funcionamiento sin conexión.
 public/
 ├─ manifest.webmanifest          PWA: nombre, iconos, modo de presentación
 ├─ sw.js                         service worker (instalación y uso sin conexión)
-└─ icons/                        iconos 192 / 512 / 512-maskable
+├─ icons/                        iconos 192 / 512 / 512-maskable
+├─ logos/                        logos institucionales del suelo (opcionales)
+└─ audio/                        música ambiental en bucle
 
 src/
 ├─ main.js                       punto de entrada
@@ -397,7 +491,9 @@ src/
 │  ├─ OrbitalMechanics.js        Kepler + conversión de escalas
 │  ├─ CelestialBody.js           un cuerpo + su máquina de estados
 │  ├─ SolarSystem.js             ensamblado de la escena
-│  └─ ProceduralTextures.js      generación de texturas en Canvas 2D
+│  ├─ ProceduralTextures.js      generación de texturas en Canvas 2D
+│  ├─ FloorLogos.js              logos apoyados en el suelo real
+│  └─ AmbientAudio.js            sonido de fondo en bucle
 ├─ interaction/
 │  ├─ HandTracking.js            lectura de las 25 articulaciones por mano
 │  ├─ GestureDetector.js         gesto de palma derecha hacia arriba
@@ -494,6 +590,7 @@ Medido en la propia escena, con menú y ficha abiertos:
 - Con **las 27 lunas activadas**: 91 llamadas y ~14.400 triángulos desde el punto de vista del
   usuario. Las lunas ocultas se saltan por completo en la actualización, en la interacción y
   en el render, así que activarlas es lo único que cuesta.
+- Con los dos logos del suelo y el menú abierto: 42 llamadas y ~14.000 triángulos
 - 18 texturas, 9 programas de shader
 - Esferas de 32×16 (48×24 para Sol, Tierra y Júpiter; 16×8 para las lunas)
 - Sin post-procesado, sin sombras, sin física

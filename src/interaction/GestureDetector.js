@@ -27,6 +27,8 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const _camPos = new THREE.Vector3();
+const _away = new THREE.Vector3();
 
 export class GestureDetector {
   constructor() {
@@ -71,13 +73,31 @@ export class GestureDetector {
     }
   }
 
-  /** Punto de anclaje del menú: justo por encima de la palma derecha. */
-  anchorPosition(hands, out = new THREE.Vector3()) {
+  /**
+   * Punto de anclaje del menú: por encima de la palma derecha y algo ALEJADO
+   * del usuario. La separación hacia delante (CONFIG.MENU.FORWARD_OFFSET) evita
+   * que el panel aparezca pegado a la cara y deja sitio para pulsar sus botones
+   * con la otra mano.
+   *
+   * @param {THREE.Camera} camera  cámara del usuario; si no se pasa, sólo se
+   *        aplica el desplazamiento vertical.
+   */
+  anchorPosition(hands, out = new THREE.Vector3(), camera = null) {
     const right = hands.states.right;
     out.copy(right.palmPosition);
     out.x += CONFIG.MENU.OFFSET[0];
     out.y += CONFIG.MENU.OFFSET[1];
     out.z += CONFIG.MENU.OFFSET[2];
+
+    if (camera && CONFIG.MENU.FORWARD_OFFSET) {
+      camera.getWorldPosition(_camPos);
+      _away.copy(out).sub(_camPos);
+      _away.y = 0;                       // sólo se aleja en horizontal
+      if (_away.lengthSq() > 1e-6) {
+        _away.normalize();
+        out.addScaledVector(_away, CONFIG.MENU.FORWARD_OFFSET);
+      }
+    }
     return out;
   }
 }

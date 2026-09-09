@@ -27,6 +27,8 @@ import { PlanetInteraction } from '../interaction/PlanetInteraction.js';
 import { SpatialUI } from '../ui/SpatialUI.js';
 import { SimulationControls } from '../sim/SimulationControls.js';
 import { XRSessionManager } from './XRSessionManager.js';
+import { FloorLogos } from '../systems/FloorLogos.js';
+import { AmbientAudio } from '../systems/AmbientAudio.js';
 
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -41,6 +43,7 @@ export class App {
       message: document.getElementById('message'),
       hud: document.getElementById('xr-hud'),
       btnHide: document.getElementById('btn-hide'),
+      buildId: document.getElementById('build-id'),
       panelRestore: document.getElementById('panel-restore'),
       caps: {
         secure: document.getElementById('cap-secure'),
@@ -71,6 +74,13 @@ export class App {
     this._wireDOM();
 
     await this._detectAndReport();
+
+    // Sello de versión: permite distinguir de un vistazo si se está probando
+    // la última compilación o una copia antigua servida desde caché.
+    if (this.dom.buildId) {
+      const sello = (typeof __BUILD_ID__ !== 'undefined') ? __BUILD_ID__ : 'desarrollo';
+      this.dom.buildId.textContent = `versión ${sello}`;
+    }
 
     this.dom.loader.classList.add('hidden');
     this.renderer.setAnimationLoop((t, frame) => this._frame(t, frame));
@@ -107,10 +117,16 @@ export class App {
 
     this.system = new SolarSystem();
     this.scene.add(this.system.root);
+
+    // Logos institucionales apoyados en el suelo real de la habitación
+    this.floorLogos = new FloorLogos();
+    this.scene.add(this.floorLogos.group);
   }
 
   _initSubsystems() {
     this.sim = new SimulationControls();
+    this.audio = new AmbientAudio('audio/ambient-neptune.mp3', 0.35);
+    this.audio.start();
     this.hands = new HandTracking(this.renderer, this.scene);
     this.gestures = new GestureDetector();
     this.interaction = new PlanetInteraction(this.system, this.hands);
@@ -144,21 +160,15 @@ export class App {
     this.controls.maxDistance = 12;
     this.controls.update();
 
-    this.raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-
-    this.renderer.domElement.addEventListener('pointerdown', (e) => {
-      if (this.renderer.xr.isPresenting) return;
-      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      this.raycaster.setFromCamera(pointer, this.camera);
-      const meshes = this.system.interactiveBodies.map((b) => b.mesh);
-      const hit = this.raycaster.intersectObjects(meshes, false)[0];
-      if (hit) {
-        const body = this.system.byId.get(hit.object.userData.bodyId);
-        if (body) this.interaction.select(body, true);
-      }
-    });
+    // NO hay selección con el ratón. La vista de escritorio es sólo para
+    // observar la escena y comprobar la simulación: la interacción real es la
+    // de las manos en el visor.
+    //
+    // Se intentó y se quitó. Un planeta rocoso mide 5-7 píxeles de radio con
+    // la cámara alejada, así que exigir un impacto exacto hacía imposible
+    // acertarle, y cualquier tolerancia acababa seleccionando cuerpos vecinos
+    // o los que quedaban de paso. Ninguna de las dos opciones era buena, y en
+    // escritorio la ficha no aporta nada que no se pueda ver en el visor.
 
     // Atajos de teclado (sólo escritorio, para probar sin visor)
     window.addEventListener('keydown', (e) => {
@@ -200,6 +210,7 @@ export class App {
       showInfo: this.ui.infoEnabled,
       showStars: this.system.stars.visible,
       allMoons: this.system.showAllMoons,
+      audioOn: this.audio ? this.audio.enabled : false,
       scales: CONFIG.VISUAL_SCALE_STEPS,
       scaleIndex: this.scaleIndex,
       orbitScales: CONFIG.ORBIT_SCALE_STEPS,
@@ -241,6 +252,10 @@ export class App {
         case 'toggle-orbits': this.system.setOrbitsVisible(!this.system.showOrbits); break;
         case 'toggle-labels': this.system.setLabelsVisible(!this.system.showLabels); break;
         case 'toggle-stars': this.system.setStarsVisible(!this.system.stars.visible); break;
+
+        case 'toggle-audio': this.audio.setEnabled(!this.audio.enabled); break;
+
+        case 'toggle-logos': this.floorLogos.setVisible(!this.floorLogos.group.visible); break;
 
         case 'toggle-moons':
           // Alterna entre mostrar sólo la Luna o todas las lunas principales
@@ -311,6 +326,9 @@ export class App {
         ? new THREE.Color(0x03050c) : null;
 
       this.renderer.xr.setFoveation(CONFIG.RENDER.FOVEATION);
+      // Entrar en la sesión es una interacción del usuario: el navegador ya
+      // permite reproducir audio a partir de aquí.
+      this.audio.start();
       this._resetAll();
     };
 
@@ -403,6 +421,10 @@ export class App {
     const origin = _v.clone().addScaledVector(_dir, 0.32);
     origin.y = Math.max(0.85, _v.y - 0.38);
     this.system.root.position.copy(origin);
+
+    // Los logos van en el SUELO (y = 0), por delante del usuario
+    this.floorLogos.placeInFrontOf(_v, _dir, 1.15);
+
     this.pendingRecenter = false;
   }
 
@@ -437,6 +459,7 @@ export class App {
     const dtSimDays = this.sim.step(dtReal);
     this.system.update(dtReal, dtSimDays, this.sim.simDays);
 
+    if (this.audio) this.audio.update(dtReal);
     if (!presenting) this.controls.update();
 
     this._updateHud(presenting);

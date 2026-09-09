@@ -245,7 +245,9 @@ export class CelestialBody {
       map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true
     });
     this.glow = new THREE.Sprite(mat);
-    this.glow.scale.setScalar(this.baseRadius * 6.5);
+    // Multiplicador ajustado al tamaño actual del Sol: con 6,5 el halo pasaba
+    // del metro de ancho y lavaba los planetas interiores.
+    this.glow.scale.setScalar(this.baseRadius * 4.0);
     this.tilt.add(this.glow);
   }
 

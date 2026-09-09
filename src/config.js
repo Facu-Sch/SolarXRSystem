@@ -17,7 +17,7 @@
  *  Con los valores por defecto:
  *    Mercurio ~0,31 m   Tierra ~0,44 m   Júpiter ~0,90 m
  *    Saturno  ~1,18 m   Urano  ~1,68 m   Neptuno ~2,02 m   Plutón ~2,00 m
- *    (radios) Tierra 2,3 cm · Júpiter 6,0 cm · Sol 8,3 cm · Mercurio 1,6 cm
+ *    (radios) Tierra 2,3 cm · Júpiter 6,0 cm · Sol 15,0 cm · Mercurio 1,6 cm
  *
  *  => Todo el sistema cabe en una esfera de ~2 m alrededor del usuario:
  *     todos los cuerpos son visibles a la vez y todos están al alcance de la
@@ -51,7 +51,23 @@ export const CONFIG = {
     K: 0.023,          // radio de escena (m) para 1 radio terrestre
     EXP: 0.40,         // exponente de compresión
     MIN_RADIUS: 0.013, // radio mínimo (m) para que todo sea agarrable con la mano
-    SUN_FACTOR: 0.55   // factor extra para el Sol (si no, ocuparía todo el centro)
+
+    /**
+     * Factor EXTRA aplicado sólo al Sol, además de la ley de potencia general.
+     *
+     * Con 1.0 el Sol sigue exactamente el mismo criterio que los planetas y
+     * queda en 30 cm de diámetro: es la opción coherente, y la que está
+     * activa. Deja 9 cm de holgura con Mercurio en su perihelio, así que no
+     * invade ninguna órbita.
+     *
+     * Bajarlo (0,55 daba 17 cm) lo encoge para que no domine tanto el centro
+     * de la escena, a costa de romper la relación con el resto de cuerpos.
+     *
+     * Ojo: NINGÚN cuerpo está a escala lineal — el Sol real mide 109 radios
+     * terrestres, así que a proporción verdadera tendría 5 m de diámetro con
+     * la Tierra en 4,6 cm. Ver la nota de compresión más arriba.
+     */
+    SUN_FACTOR: 1.0
   },
 
   /**
@@ -109,7 +125,10 @@ export const CONFIG = {
     TOUCH_MARGIN: 0.018,      // holgura (m) añadida al radio del cuerpo para el contacto
     PINCH_ON: 0.028,          // distancia pulgar-índice (m) para iniciar pinza
     PINCH_OFF: 0.048,         // histéresis de salida de pinza
-    SELECT_DWELL: 0.20,       // s de contacto continuo para seleccionar (evita falsos toques)
+    // Permanencia para abrir la ficha. Sube a 0,40 s porque seleccionar ahora
+    // exige tener la yema DENTRO del cuerpo: con un umbral corto, atravesar un
+    // planeta de camino a otro bastaba para robarle la ficha.
+    SELECT_DWELL: 0.40,
     GRAB_TAU: 0.045,          // constante de tiempo del suavizado al seguir la mano (s)
     RETURN_TAU: 0.22,         // constante de tiempo del retorno a la órbita (s)
     RETURN_MIN_SPEED: 0.12,   // m/s mínimos durante el retorno (para que sea perceptible)
@@ -135,7 +154,8 @@ export const CONFIG = {
     OPENNESS_MIN: 0.55,  // la mano debe estar razonablemente abierta
     HOLD_TIME: 0.30,     // s manteniendo el gesto para abrir
     AUTO_HIDE: 8.0,      // s sin gesto ni interacción antes de cerrarse solo
-    OFFSET: [0.0, 0.16, 0.0]
+    OFFSET: [0.0, 0.16, 0.0],
+    FORWARD_OFFSET: 0.10   // m que el menú se separa del usuario al abrirse
   },
 
   RENDER: {

@@ -105,7 +105,10 @@ export class PlanetInteraction {
         const R = body.worldRadius;
         let touching = false;
         let fingers = 0;
-        let minDist = Infinity;
+        // Distancia a la SUPERFICIE, no al centro. Comparando centros ganaba
+        // siempre el cuerpo más pequeño que estuviera cerca —la Luna le robaba
+        // el contacto a la Tierra—, aunque la mano estuviera dentro del grande.
+        let minSurface = Infinity;
 
         for (const cp of hand.contactPoints) {
           const d = cp.pos.distanceTo(_p);
@@ -114,17 +117,28 @@ export class PlanetInteraction {
           // Para el agarre "a mano llena" la yema debe estar ESTRICTAMENTE
           // dentro de la esfera del cuerpo (sin margen): rozarlo no basta.
           if (cp.name !== 'palm' && d < R) fingers++;
-          if (d < minDist) minDist = d;
+          const surface = d - R;
+          if (surface < minSurface) minSurface = surface;
         }
 
-        if (touching && minDist < bestDist) {
+        if (touching && minSurface < bestDist) {
           best = body;
-          bestDist = minDist;
+          bestDist = minSurface;
           bestFingers = fingers;
         }
       }
 
-      if (best) touchedByHand.set(hand.handedness, { body: best, fingers: bestFingers, hand });
+      if (best) {
+        touchedByHand.set(hand.handedness, {
+          body: best,
+          fingers: bestFingers,
+          hand,
+          // `penetra` = alguna yema está DENTRO de la esfera, no sólo dentro
+          // del margen de holgura. Es lo que distingue "voy a por este cuerpo"
+          // de "he pasado cerca de él de camino a otro".
+          penetra: bestDist < 0
+        });
+      }
       hand.enclosingFingers = bestFingers;
     }
 
@@ -167,8 +181,22 @@ export class PlanetInteraction {
     // ---------------------------------------------------------------------
     // 4) Estados TOUCHED / NORMAL y selección por permanencia
     // ---------------------------------------------------------------------
+    // TOCAR y SELECCIONAR son dos cosas distintas, a propósito:
+    //
+    //  - TOCAR es generoso (radio + holgura) porque sirve para congelar la
+    //    rotación, que es una respuesta inmediata y reversible.
+    //  - SELECCIONAR abre la ficha, así que tiene que ser deliberado: exige
+    //    que la yema esté DENTRO del cuerpo y que se mantenga ahí.
+    //
+    // Sin esa distinción, al llevar la mano hacia un planeta se rozaban por el
+    // camino todos los que quedaban de paso y la ficha iba saltando de uno a
+    // otro hasta llegar al destino.
     const touchedBodies = new Set();
-    for (const { body } of touchedByHand.values()) touchedBodies.add(body);
+    const selectableBodies = new Set();
+    for (const t of touchedByHand.values()) {
+      touchedBodies.add(t.body);
+      if (t.penetra) selectableBodies.add(t.body);
+    }
 
     for (const body of bodies) {
       const isGrabbed = this.grabbedBy.left === body || this.grabbedBy.right === body;
@@ -183,10 +211,15 @@ export class PlanetInteraction {
 
       if (touchedBodies.has(body)) {
         body.beginTouch();
-        const t = (this._dwell.get(body.id) || 0) + dtReal;
-        this._dwell.set(body.id, t);
-        if (t >= CONFIG.INTERACTION.SELECT_DWELL && this.selected !== body) {
-          this.select(body);
+        if (selectableBodies.has(body)) {
+          const t = (this._dwell.get(body.id) || 0) + dtReal;
+          this._dwell.set(body.id, t);
+          if (t >= CONFIG.INTERACTION.SELECT_DWELL && this.selected !== body) {
+            this.select(body);
+          }
+        } else {
+          // Roce sin penetrar: congela la rotación pero no acumula permanencia
+          this._dwell.set(body.id, 0);
         }
       } else {
         body.endTouch();

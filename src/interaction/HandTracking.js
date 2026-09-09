@@ -111,7 +111,6 @@ export class HandTracking {
 
     this._hands = [];
     this._controllers = [];
-    this._visuals = [];
 
     this._setupHands();
     this._setupControllers();
@@ -138,10 +137,9 @@ export class HandTracking {
       this.scene.add(hand);
       this._hands.push(hand);
 
-      // Representación visual: 25 esferitas instanciadas por mano.
-      const visual = this._makeHandVisual();
-      this.scene.add(visual.mesh);
-      this._visuals.push(visual);
+      // NOTA: no se dibuja ninguna representación de la mano. En passthrough
+      // el usuario ya ve sus manos reales, y superponerles esferas azules sólo
+      // ensucia la vista y tapa los planetas pequeños al ir a agarrarlos.
     }
   }
 
@@ -177,18 +175,6 @@ export class HandTracking {
     }
   }
 
-  _makeHandVisual() {
-    const geo = new THREE.SphereGeometry(1, 8, 6);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0x9fd8ff, transparent: true, opacity: 0.55, depthWrite: false
-    });
-    const mesh = new THREE.InstancedMesh(geo, mat, JOINT_NAMES.length);
-    mesh.frustumCulled = false;
-    mesh.visible = false;
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    return { mesh, matrix: new THREE.Matrix4() };
-  }
-
   // -------------------------------------------------------------------------
   // Actualización por frame
   // -------------------------------------------------------------------------
@@ -204,23 +190,18 @@ export class HandTracking {
     // --- 1) Manos con articulaciones ---------------------------------------
     for (let i = 0; i < this._hands.length; i++) {
       const hand = this._hands[i];
-      const visual = this._visuals[i];
       const handedness = hand.userData.handedness;
       const state = handedness ? this.states[handedness] : null;
 
       const wrist = hand.joints?.['wrist'];
       const tracked = !!(state && wrist && wrist.visible !== false && hand.joints['index-finger-tip']);
 
-      if (!tracked) {
-        visual.mesh.visible = false;
-        continue;
-      }
+      if (!tracked) continue;
 
       anyJoints = true;
       state.source = 'hand';
       state.active = true;
       this._updateFromJoints(state, hand);
-      this._updateHandVisual(visual, hand, state);
     }
 
     this.handTrackingActive = anyJoints;
@@ -354,26 +335,6 @@ export class HandTracking {
     state.contactCount = count;
   }
 
-  _updateHandVisual(visual, hand, state) {
-    const mesh = visual.mesh;
-    const m = visual.matrix;
-    let i = 0;
-    for (const name of JOINT_NAMES) {
-      const j = hand.joints[name];
-      if (!j) continue;
-      const r = (typeof j.jointRadius === 'number' && j.jointRadius > 0) ? j.jointRadius : 0.008;
-      j.getWorldPosition(_a);
-      m.makeScale(r, r, r);
-      m.setPosition(_a);
-      mesh.setMatrixAt(i++, m);
-    }
-    mesh.count = i;
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.visible = i > 0;
-    mesh.material.color.setHex(state.pinching ? 0x66ffc2 : 0x9fd8ff);
-    mesh.material.opacity = state.pinching ? 0.8 : 0.5;
-  }
-
   // -------------------------------------------------------------------------
   // Consultas
   // -------------------------------------------------------------------------
@@ -384,9 +345,5 @@ export class HandTracking {
     if (this.states.left.active) out.push(this.states.left);
     if (this.states.right.active) out.push(this.states.right);
     return out;
-  }
-
-  setVisualsVisible(v) {
-    for (const vis of this._visuals) vis.mesh.visible = v && vis.mesh.count > 0;
   }
 }

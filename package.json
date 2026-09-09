@@ -6,6 +6,7 @@
   "description": "Demo WebXR de Realidad Mixta para Meta Quest 3: Sistema Solar interactivo con hand tracking (Three.js + Vite).",
   "scripts": {
     "dev": "vite --host",
+    "dev:http": "vite --host --mode http",
     "build": "vite build",
     "preview": "vite preview --host"
   },
