@@ -29,9 +29,17 @@ import { SimulationControls } from '../sim/SimulationControls.js';
 import { XRSessionManager } from './XRSessionManager.js';
 import { FloorLogos } from '../systems/FloorLogos.js';
 import { AmbientAudio } from '../systems/AmbientAudio.js';
+import { ImpactAudio } from '../systems/ImpactAudio.js';
+import { SimDateLabel } from '../ui/SimDateLabel.js';
+import { PinchIndicator } from '../ui/PinchIndicator.js';
 
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+
+/** Nivel del menú (0..1) -> volumen del elemento de audio (ver CONFIG.MUSIC). */
+function musicVolume(nivel) {
+  return Math.pow(nivel, 1.5);
+}
 
 export class App {
   constructor() {
@@ -44,6 +52,7 @@ export class App {
       hud: document.getElementById('xr-hud'),
       btnHide: document.getElementById('btn-hide'),
       buildId: document.getElementById('build-id'),
+      audioStatus: document.getElementById('audio-status'),
       panelRestore: document.getElementById('panel-restore'),
       caps: {
         secure: document.getElementById('cap-secure'),
@@ -58,7 +67,10 @@ export class App {
     this.pendingRecenter = false;
     this.scaleIndex = CONFIG.DEFAULT_VISUAL_SCALE_INDEX;
     this.orbitScaleIndex = CONFIG.DEFAULT_ORBIT_SCALE_INDEX;
+    this.musicIndex = CONFIG.MUSIC.DEFAULT_INDEX;
     this.warnedNoHands = false;
+    /** Cámara con la pose real de la cabeza (la XR dentro de la sesión). */
+    this._activeCamera = null;
   }
 
   // =========================================================================
@@ -78,8 +90,9 @@ export class App {
     // Sello de versión: permite distinguir de un vistazo si se está probando
     // la última compilación o una copia antigua servida desde caché.
     if (this.dom.buildId) {
+      const version = (typeof __APP_VERSION__ !== 'undefined') ? __APP_VERSION__ : '?';
       const sello = (typeof __BUILD_ID__ !== 'undefined') ? __BUILD_ID__ : 'desarrollo';
-      this.dom.buildId.textContent = `versión ${sello}`;
+      this.dom.buildId.textContent = `versión ${version} · ${sello}`;
     }
 
     this.dom.loader.classList.add('hidden');
@@ -118,6 +131,10 @@ export class App {
     this.system = new SolarSystem();
     this.scene.add(this.system.root);
 
+    // Fecha simulada, flotando sobre el Sol (acompaña al recentrado)
+    this.dateLabel = new SimDateLabel();
+    this.system.root.add(this.dateLabel.sprite);
+
     // Logos institucionales apoyados en el suelo real de la habitación
     this.floorLogos = new FloorLogos();
     this.scene.add(this.floorLogos.group);
@@ -125,17 +142,33 @@ export class App {
 
   _initSubsystems() {
     this.sim = new SimulationControls();
-    this.audio = new AmbientAudio('audio/ambient-neptune.mp3', 0.35);
+    this.audio = new AmbientAudio('audio/ambient-neptune.mp3',
+      musicVolume(CONFIG.MUSIC.STEPS[this.musicIndex]));
+    // El estado de la música se ve en el panel y en el menú: si el visor no
+    // la reproduce, al menos se sabe por qué.
+    this.audio.onStatus = (s) => {
+      if (this.dom.audioStatus) this.dom.audioStatus.textContent = `música: ${s}`;
+      if (this.ui) this._syncMenuState();
+    };
     this.audio.start();
+    this.impacts = new ImpactAudio();
+    this.system.collisions.onImpact = (A, B, speed, point) => {
+      this.impacts.play(speed, A.worldRadius, B.worldRadius, point);
+    };
     this.hands = new HandTracking(this.renderer, this.scene);
     this.gestures = new GestureDetector();
     this.interaction = new PlanetInteraction(this.system, this.hands);
+    this.pinchIndicator = new PinchIndicator(this.scene);
     this.ui = new SpatialUI(this.scene, this.camera);
 
     this.interaction.onSelect = (body) => {
       if (body) this.ui.showInfoFor(body);
       else this.ui.hideInfo();
     };
+
+    // Modo comparación: la pinza entrega el cuerpo a la comparación de tamaños
+    this.interaction.onComparePick = (body) => this.ui.compare.pick(body);
+    this.ui.compare.onClose = () => this._setCompare(false);
 
     this.ui.info.onClose = () => {
       this.ui.hideInfo();
@@ -187,6 +220,7 @@ export class App {
         case 'r': this._menuAction('reset-all'); break;
         case 'o': this._menuAction('toggle-orbits'); break;
         case 'n': this._menuAction('toggle-labels'); break;
+        case 'c': this._menuAction('toggle-compare'); break;
       }
     });
   }
@@ -211,6 +245,13 @@ export class App {
       showStars: this.system.stars.visible,
       allMoons: this.system.showAllMoons,
       audioOn: this.audio ? this.audio.enabled : false,
+      collisionsOn: this.system.collisionsEnabled,
+      collidersVisible: this.system.collidersVisible,
+      impactSoundOn: this.impacts ? this.impacts.enabled : false,
+      musicSteps: CONFIG.MUSIC.STEPS,
+      musicIndex: this.audio.enabled ? this.musicIndex : 0,
+      musicStatus: this.audio.status,
+      compareOn: this.ui.compare.active,
       scales: CONFIG.VISUAL_SCALE_STEPS,
       scaleIndex: this.scaleIndex,
       orbitScales: CONFIG.ORBIT_SCALE_STEPS,
@@ -235,6 +276,16 @@ export class App {
         this.orbitScaleIndex = needed;
         this.system.setOrbitScale(CONFIG.ORBIT_SCALE_STEPS[needed]);
       }
+    } else if (id.startsWith('music-')) {
+      const i = parseInt(id.slice(6), 10);
+      const nivel = CONFIG.MUSIC.STEPS[i];
+      if (nivel === 0) {
+        this.audio.setEnabled(false);
+      } else {
+        this.musicIndex = i;
+        this.audio.setVolume(musicVolume(nivel));
+        if (!this.audio.enabled) this.audio.setEnabled(true);
+      }
     } else if (id.startsWith('orbit-')) {
       this.orbitScaleIndex = parseInt(id.slice(6), 10);
       this.system.setOrbitScale(CONFIG.ORBIT_SCALE_STEPS[this.orbitScaleIndex]);
@@ -254,6 +305,21 @@ export class App {
         case 'toggle-stars': this.system.setStarsVisible(!this.system.stars.visible); break;
 
         case 'toggle-audio': this.audio.setEnabled(!this.audio.enabled); break;
+
+        case 'toggle-collisions':
+          this.system.setCollisionsEnabled(!this.system.collisionsEnabled);
+          break;
+
+        case 'toggle-colliders':
+          this.system.setCollidersVisible(!this.system.collidersVisible);
+          break;
+
+        case 'toggle-impact-sound':
+          this.impacts.unlock();
+          this.impacts.setEnabled(!this.impacts.enabled);
+          break;
+
+        case 'toggle-compare': this._setCompare(!this.ui.compare.active); break;
 
         case 'toggle-logos': this.floorLogos.setVisible(!this.floorLogos.group.visible); break;
 
@@ -281,6 +347,22 @@ export class App {
   }
 
   /**
+   * Activa o desactiva la comparación de tamaños. Al activarla se cierran el
+   * menú y la ficha para dejar a la vista la escena de comparación.
+   */
+  _setCompare(v) {
+    if (this.ui.compare.active === v) return;
+    this.ui.compare.setActive(v, this._activeCamera || this.camera);
+    this.interaction.compareMode = v;
+    if (v) {
+      this.ui.hideInfo();
+      this.interaction.clearSelectionSilently(0);
+      this.ui.closeMenu();
+    }
+    this._syncMenuState();
+  }
+
+  /**
    * RESET completo (requisito §18):
    *  - suelta lo que haya en las manos y borra transformaciones manuales
    *  - restaura las escalas visuales
@@ -302,6 +384,7 @@ export class App {
     this.system.setOrbitsVisible(true);
     this.system.setLabelsVisible(true);
     this.ui.hideInfo();
+    this._setCompare(false);
     // Recolocamos los cuerpos en su posición orbital de t = 0 inmediatamente
     this.system.update(0, 0, this.sim.simDays);
   }
@@ -360,6 +443,8 @@ export class App {
   async _enter(mode) {
     try {
       this._setMessage('', false);
+      // Dentro del gesto del clic: único momento en que se puede crear audio
+      this.impacts.unlock();
       const session = await this.xr.requestSession(mode, this.dom.overlay);
       await this.renderer.xr.setSession(session);
     } catch (err) {
@@ -441,6 +526,7 @@ export class App {
     // pasa SIEMPRE la cámara normal: Three.js sustituye internamente por la
     // suya, y pasarle la propia cámara XR la corrompería.
     const activeCamera = presenting ? this.renderer.xr.getCamera() : this.camera;
+    this._activeCamera = activeCamera;
 
     // 1-2) Manos y gestos
     this.hands.update();
@@ -454,12 +540,18 @@ export class App {
     // 4) Interacción con los planetas (las manos ocupadas con la UI no cuentan)
     this.interaction.blockedHands = this.ui.busyHands;
     this.interaction.update(dtReal);
+    this.pinchIndicator.update(this.hands, this.interaction, activeCamera);
 
     // 5-6) Tiempo y sistema solar
     const dtSimDays = this.sim.step(dtReal);
     this.system.update(dtReal, dtSimDays, this.sim.simDays);
 
     if (this.audio) this.audio.update(dtReal);
+    this.impacts.updateListener(activeCamera);
+
+    this.dateLabel.sprite.position.set(0, this.system.sun.label.position.y + 0.045, 0);
+    this.dateLabel.update(dtReal, this.sim.simDays, this.sim.speed, this.sim.playing);
+
     if (!presenting) this.controls.update();
 
     this._updateHud(presenting);
@@ -483,7 +575,8 @@ export class App {
     this.warnedNoHands = true;
 
     const grabbed = this.interaction.grabbedBy.left || this.interaction.grabbedBy.right;
-    if (grabbed) this._setHud(`Sujetando ${grabbed.data.name} — soltá para devolverlo a su órbita`);
+    if (grabbed) this._setHud(`Sujetando ${grabbed.data.name} — soltá para devolverlo, o lanzalo`);
+    else if (this.ui.compare.active) this._setHud('Comparación: pellizcá dos cuerpos');
     else if (this.ui.menu.isVisible) this._setHud('Tocá un botón con la yema del índice');
     else this._setHud('Palma derecha hacia arriba → menú');
   }

@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { SpatialMenu } from './SpatialMenu.js';
 import { InformationPanel } from './InformationPanel.js';
+import { SizeComparison } from './SizeComparison.js';
 
 const REARM_TIME = 0.22;   // s antes de admitir otra pulsación de la misma mano
 
@@ -31,8 +32,10 @@ export class SpatialUI {
 
     this.menu = new SpatialMenu();
     this.info = new InformationPanel();
+    this.compare = new SizeComparison();
     scene.add(this.menu.mesh);
     scene.add(this.info.mesh);
+    scene.add(this.compare.group);
 
     this.menuIdleTime = 0;
     this.infoEnabled = true;
@@ -111,6 +114,7 @@ export class SpatialUI {
     const panels = [];
     if (this.menu.isVisible) panels.push(this.menu);
     if (this.info.isVisible) panels.push(this.info);
+    if (this.compare.panel.isVisible) panels.push(this.compare.panel);
 
     let anyHandNearPanel = false;
 
@@ -143,6 +147,7 @@ export class SpatialUI {
         this.menuIdleTime = 0;
         if (hitPanel === this.menu) this.menu.press(hitId);
         else if (hitPanel === this.info) this.info.press(hitId);
+        else if (hitPanel === this.compare.panel) this.compare.panel.press(hitId);
       }
       this._lastHit[h] = hitId;
     }
@@ -162,10 +167,12 @@ export class SpatialUI {
 
     this.menu.updateFade(dtReal);
     this.info.updateFade(dtReal);
+    this.compare.update(dtReal, this.camera);
   }
 
   dispose() {
     this.menu.dispose();
     this.info.dispose();
+    this.compare.dispose();
   }
 }

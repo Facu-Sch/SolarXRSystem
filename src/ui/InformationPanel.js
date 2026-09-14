@@ -3,9 +3,9 @@
  *  InformationPanel — ficha educativa del cuerpo seleccionado
  * ============================================================================
  *  Requisitos §11 y §12:
- *   - Aparece AL LADO del cuerpo seleccionado (a su derecha o a su izquierda,
- *     el lado que quede hacia el centro del campo visual), nunca encima ni
- *     detrás de él.
+ *   - Aparece ARRIBA de su cuerpo, por encima del nombre (v2.3), así cada
+ *     ficha queda claramente asociada a su planeta. El botón «Mover» la pasa
+ *     a la derecha, a la izquierda y de vuelta arriba.
  *   - Se orienta hacia el usuario.
  *   - Tipografía grande y tamaño ajustable desde la propia ficha.
  *   - Permite FIJAR el cuerpo: deja de avanzar por su órbita y se queda quieto
@@ -54,12 +54,21 @@ export class InformationPanel extends CanvasPanel {
 
     this.body = null;
     this.widthIndex = wIdx;
-    /** -1 = a la izquierda del cuerpo, +1 = a la derecha, 0 = automático. */
+    /** 0 = arriba del cuerpo (por defecto), +1 = a la derecha, -1 = a la izquierda. */
     this.sideOverride = 0;
     this._resolvedSide = 1;
 
     this.onClose = null;
     this.onPinToggle = null;   // (body, pinned) => void
+
+    // El lienzo tiene SIEMPRE la altura máxima y nunca cambia de tamaño (v2.4).
+    // Three.js reserva la textura en la GPU con el tamaño de la primera subida
+    // y no la redimensiona: si la ficha del Sol (752 px) se subía primero, la
+    // de la Tierra (865 px) ya no entraba y seguía viéndose la del Sol con
+    // restos de otras encima. La altura de cada ficha se ajusta recortando la
+    // textura (repeat/offset) y el plano 3D, no el lienzo.
+    this.canvas.height = MAX_H;
+    this._applyGeometry();
   }
 
   // -------------------------------------------------------------------------
@@ -71,7 +80,7 @@ export class InformationPanel extends CanvasPanel {
     const changed = this.body !== body;
     this.body = body;
     if (!body) { this.hide(); return; }
-    if (changed) this.sideOverride = 0;   // el lado se vuelve a decidir solo
+    if (changed) this.sideOverride = 0;   // cada ficha nueva aparece arriba
     this.redraw();
     this.show();
   }
@@ -89,8 +98,8 @@ export class InformationPanel extends CanvasPanel {
         this.setWidthIndex(this.widthIndex - 1);
         break;
       case 'info-side':
-        // Alterna manualmente el lado en el que se coloca la ficha
-        this.sideOverride = (this._resolvedSide === 1) ? -1 : 1;
+        // Arriba -> derecha -> izquierda -> arriba
+        this.sideOverride = this.sideOverride === 0 ? 1 : (this.sideOverride === 1 ? -1 : 0);
         break;
       case 'info-pin':
         if (this.body) {
@@ -126,7 +135,7 @@ export class InformationPanel extends CanvasPanel {
    * El lado se elige automáticamente: si el cuerpo está a la derecha del
    * centro de la vista, la ficha va a su izquierda (y al revés), de forma que
    * el conjunto cuerpo + ficha tiende a quedar centrado y no se va fuera del
-   * campo visual. El botón «Lado» permite forzarlo.
+   * campo visual. Sólo se usa si se elige con el botón «Mover».
    */
   place(camera) {
     if (!this.body) return;
@@ -145,12 +154,20 @@ export class InformationPanel extends CanvasPanel {
     if (_camRight.lengthSq() < 1e-6) _camRight.set(1, 0, 0);
     _camRight.normalize();
 
-    let side = this.sideOverride;
-    if (side === 0) {
-      // Si el cuerpo cae a la derecha de la vista, la ficha va a su izquierda
-      side = _bodyPos.clone().sub(_camPos).dot(_camRight) > 0 ? -1 : 1;
-    }
+    const side = this.sideOverride;
     this._resolvedSide = side;
+
+    if (side === 0) {
+      // ARRIBA: el borde inferior de la ficha queda justo sobre el nombre
+      // del cuerpo (o sobre el cuerpo si los nombres están ocultos).
+      let top = this.body.worldRadius;
+      const label = this.body.label;
+      if (label && label.visible) top = Math.max(top, label.position.y + label.scale.y / 2);
+      this.mesh.position.copy(_bodyPos);
+      this.mesh.position.y += top + CONFIG.INFO_PANEL.ABOVE_GAP + this.heightM / 2;
+      this.faceCamera(camera);
+      return;
+    }
 
     const gap = this.body.worldRadius + this.widthM * 0.5 + CONFIG.INFO_PANEL.SIDE_GAP;
     _offset.copy(_camRight).multiplyScalar(side * gap);
@@ -184,18 +201,29 @@ export class InformationPanel extends CanvasPanel {
     }
   }
 
+  /** Altura LÓGICA de la ficha; el lienzo no cambia (ver constructor). */
   _resize(pxH) {
     if (this.pxH === pxH) return;
     this.pxH = pxH;
-    this.canvas.height = pxH;
     this._applyGeometry();
   }
 
-  /** Reconstruye el plano manteniendo la relación de aspecto del lienzo. */
+  /**
+   * Reconstruye el plano con la relación de aspecto de la zona usada y recorta
+   * la textura a esa zona: franja superior del lienzo, de alto pxH.
+   */
   _applyGeometry() {
     this.heightM = this.widthM * this.pxH / this.pxW;
     this.mesh.geometry.dispose();
     this.mesh.geometry = new THREE.PlaneGeometry(this.widthM, this.heightM);
+    const f = this.pxH / this.canvas.height;
+    this.texture.repeat.set(1, f);
+    this.texture.offset.set(0, 1 - f);
+  }
+
+  /** Borra el lienzo entero, no sólo la zona lógica. */
+  _clear() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /** Dibuja el contenido. Devuelve la Y donde termina el texto. */
@@ -300,7 +328,7 @@ export class InformationPanel extends CanvasPanel {
     const btns = [
       { id: 'info-smaller', label: 'A −', dim: this.widthIndex === 0 },
       { id: 'info-bigger', label: 'A +', dim: this.widthIndex === maxIdx },
-      { id: 'info-side', label: 'Lado' },
+      { id: 'info-side', label: 'Mover' },
       { id: 'info-pin', label: this.body.pinned ? 'Soltar' : 'Fijar', active: this.body.pinned },
       { id: 'info-close', label: 'Cerrar' }
     ];

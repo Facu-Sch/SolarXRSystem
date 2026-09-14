@@ -122,13 +122,11 @@ export const CONFIG = {
   DEFAULT_ORBIT_SCALE_INDEX: 0,
 
   INTERACTION: {
-    TOUCH_MARGIN: 0.018,      // holgura (m) añadida al radio del cuerpo para el contacto
+    // Sin holgura (v2.3): la mano toca el astro cuando su collider, del tamaño
+    // exacto del astro, se superpone con las yemas o la palma.
+    TOUCH_MARGIN: 0,
     PINCH_ON: 0.028,          // distancia pulgar-índice (m) para iniciar pinza
     PINCH_OFF: 0.048,         // histéresis de salida de pinza
-    // Permanencia para abrir la ficha. Sube a 0,40 s porque seleccionar ahora
-    // exige tener la yema DENTRO del cuerpo: con un umbral corto, atravesar un
-    // planeta de camino a otro bastaba para robarle la ficha.
-    SELECT_DWELL: 0.40,
     GRAB_TAU: 0.045,          // constante de tiempo del suavizado al seguir la mano (s)
     RETURN_TAU: 0.22,         // constante de tiempo del retorno a la órbita (s)
     RETURN_MIN_SPEED: 0.12,   // m/s mínimos durante el retorno (para que sea perceptible)
@@ -142,11 +140,72 @@ export const CONFIG = {
     FULL_GRAB_MAX_OPENNESS: 0.80    // la mano debe estar cerrándose, no abierta
   },
 
+  /**
+   * COLLIDERS. Ver src/physics/CollisionSystem.js.
+   *
+   * Cada astro tiene UN collider esférico del tamaño exacto del astro (v2.3):
+   * sin radio mínimo ni holgura. La ficha se abre cuando, en el instante de
+   * pellizcar, la mano (yemas del pulgar e índice y el punto entre ambas) está
+   * en contacto con ese collider.
+   */
+  COLLIDERS: {
+    OFFSET_TAU: 0.30,       // s que tarda en relajarse el desplazamiento de un choque
+    MAX_OFFSET: 0.60,       // m máximos que un choque puede apartar un cuerpo
+    ITERATIONS: 3           // pasadas de resolución por frame (choques en cadena)
+  },
+
+  /**
+   * LANZAR CUERPOS (v2.1). Al soltar un cuerpo con la mano en movimiento sale
+   * despedido con esa velocidad, se frena solo, choca con lo que encuentre y
+   * al detenerse vuelve a su órbita.
+   */
+  THROW: {
+    MIN_SPEED: 0.55,        // m/s de la mano al soltar para que cuente como lanzamiento
+    MAX_SPEED: 2.0,         // m/s máximos (evita que atraviese cuerpos pequeños entre frames)
+    VELOCITY_TAU: 0.035,    // suavizado de la velocidad medida de la mano (s)
+    PEAK_TAU: 0.10,         // cuánto "recuerda" el pico de velocidad al abrir la pinza (s)
+    DRAG_TAU: 0.75,         // frenado: a los 0,75 s conserva el 37 % de la velocidad
+    STOP_SPEED: 0.07,       // por debajo de esto deja de volar y vuelve a su órbita
+    MAX_TIME: 3.0,          // s máximos de vuelo
+    MAX_DISTANCE: 2.5,      // m máximos que se aleja de su órbita
+
+    RESTITUTION: 0.55,      // 0 = choque plástico, 1 = rebote perfecto
+    KICK_MIN_SPEED: 0.25,   // m/s que debe recibir un cuerpo quieto para salir despedido
+    IMPACT_MIN_SPEED: 0.04  // velocidad de aproximación mínima para intercambiar impulso
+  },
+
+  /**
+   * Música de fondo: niveles del menú. El volumen real del elemento de audio
+   * es nivel^1,5 (el oído percibe el volumen de forma logarítmica): 50 %
+   * equivale a 0,35, el valor fijo que tenía antes de la v2.2.
+   */
+  MUSIC: {
+    STEPS: [0, 0.25, 0.5, 0.75, 1],
+    DEFAULT_INDEX: 2
+  },
+
+  /** Sonido de los choques, sintetizado con Web Audio (sin archivos). */
+  IMPACT_AUDIO: {
+    VOLUME: 0.9,
+    MAX_VOICES: 8,          // choques sonando a la vez
+    PAIR_REARM: 0.15        // s que un par debe estar separado para volver a sonar
+  },
+
+  /** Modo comparación de tamaños a proporción real (v2.1). */
+  COMPARE: {
+    BIG_RADIUS: 0.10,       // radio (m) con que se dibuja el mayor de los dos
+    MIN_RADIUS: 0.0008,     // radio mínimo dibujado, aunque el real sea menor
+    DISTANCE: 0.60,         // m por delante del usuario
+    HEIGHT: -0.04,          // m respecto de los ojos
+    GAP: 0.05               // separación entre las dos esferas (m)
+  },
+
   /** Ficha informativa: anchos disponibles (m) y lado por defecto. */
   INFO_PANEL: {
     WIDTHS: [0.26, 0.34, 0.44, 0.56],
     DEFAULT_WIDTH_INDEX: 1,
-    SIDE_GAP: 0.05         // separación (m) entre el borde del cuerpo y la ficha
+    SIDE_GAP: 0.05,        // separación (m) entre el borde del cuerpo y la ficha (a un lado)
+    ABOVE_GAP: 0.02        // separación (m) sobre el nombre del cuerpo (ficha arriba)
   },
 
   MENU: {
@@ -154,7 +213,7 @@ export const CONFIG = {
     OPENNESS_MIN: 0.55,  // la mano debe estar razonablemente abierta
     HOLD_TIME: 0.30,     // s manteniendo el gesto para abrir
     AUTO_HIDE: 8.0,      // s sin gesto ni interacción antes de cerrarse solo
-    OFFSET: [0.0, 0.16, 0.0],
+    OFFSET: [0.0, 0.19, 0.0],   // el menú creció una fila (v2.2): sube para no tapar la mano
     FORWARD_OFFSET: 0.10   // m que el menú se separa del usuario al abrirse
   },
 
@@ -172,5 +231,6 @@ export const BODY_STATE = {
   NORMAL: 'NORMAL',
   TOUCHED: 'TOUCHED',
   GRABBED: 'GRABBED',
+  THROWN: 'THROWN',        // lanzado: vuela con inercia antes de volver (v2.1)
   RETURNING: 'RETURNING'
 };

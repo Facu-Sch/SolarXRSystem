@@ -1,7 +1,7 @@
 {
   "name": "sistema-solar-webxr-mr",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.4.1",
   "type": "module",
   "description": "Demo WebXR de Realidad Mixta para Meta Quest 3: Sistema Solar interactivo con hand tracking (Three.js + Vite).",
   "scripts": {

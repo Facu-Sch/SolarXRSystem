@@ -14,6 +14,7 @@ import { CONFIG } from '../config.js';
 import { SUN, PLANETS } from '../data/planetData.js';
 import { MOONS } from '../data/moonData.js';
 import { CelestialBody } from './CelestialBody.js';
+import { CollisionSystem } from '../physics/CollisionSystem.js';
 
 export class SolarSystem {
   constructor() {
@@ -40,6 +41,11 @@ export class SolarSystem {
     /** false = sólo la Luna (por defecto); true = todas las lunas principales. */
     this.showAllMoons = false;
     this.setAllMoonsVisible(false);
+
+    /** Colliders y choques entre cuerpos (v2.0). */
+    this.collisions = new CollisionSystem();
+    this.collisionsEnabled = true;
+    this.collidersVisible = false;
   }
 
   // -------------------------------------------------------------------------
@@ -158,6 +164,16 @@ export class SolarSystem {
       if (!body.root.visible) continue;      // lunas ocultas: no cuestan nada
       body.update(dtReal, dtSimDays, simDays);
     }
+
+    // Los choques se resuelven DESPUÉS de mover cada cuerpo, sobre sus
+    // posiciones definitivas del frame, y antes de dibujar.
+    const visibles = this.interactiveBodies;
+    if (this.collisionsEnabled) {
+      this.collisions.resolve(visibles, this.root);
+    } else {
+      for (const b of visibles) b.colliding = false;
+    }
+    this.collisions.updateGizmos(visibles);
   }
 
   /** Cuerpos con los que se puede interactuar ahora mismo. */
@@ -168,6 +184,18 @@ export class SolarSystem {
   // -------------------------------------------------------------------------
   // Controles expuestos al menú
   // -------------------------------------------------------------------------
+
+  /** Activa o desactiva los choques entre cuerpos. */
+  setCollisionsEnabled(v) {
+    this.collisionsEnabled = v;
+    // Al desactivarlos, los desplazamientos pendientes se relajan solos.
+  }
+
+  /** Muestra u oculta los colliders (depuración / explicación). */
+  setCollidersVisible(v) {
+    this.collidersVisible = v;
+    this.collisions.setVisible(v, this.bodies);
+  }
 
   setOrbitsVisible(v) {
     this.showOrbits = v;

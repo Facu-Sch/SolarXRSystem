@@ -19,6 +19,8 @@
  *   NORMAL     órbita + rotación normales
  *   TOUCHED    la mano está en contacto: la rotación se congela (req. §7)
  *   GRABBED    agarrado: se detienen órbita y rotación, sigue a la mano
+ *   THROWN     lanzado (v2.1): vuela con la velocidad de la mano, se frena
+ *              solo y rebota en lo que choca; al detenerse pasa a RETURNING
  *   RETURNING  soltado: interpola suavemente hasta su posición orbital y va
  *              recuperando progresivamente la rotación
  * ============================================================================
@@ -37,6 +39,7 @@ import { makeLabelSprite } from '../ui/Label.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _m3 = new THREE.Matrix3();
 
 export class CelestialBody {
   /**
@@ -139,6 +142,28 @@ export class CelestialBody {
     /** "Fijado" desde la ficha: se queda quieto en su sitio. */
     this.pinned = false;
     this.pinnedPosition = new THREE.Vector3();
+
+    // --- Colliders (v2.0) -------------------------------------------------
+    /** Desplazamiento transitorio producido por choques; se relaja solo. */
+    this.collisionOffset = new THREE.Vector3();
+    /** La pinza de alguna mano está dentro de su collider de agarre. */
+    this.armed = false;
+    /** Está tocando otro cuerpo en este frame. */
+    this.colliding = false;
+
+    // --- Lanzamiento (v2.1) -------------------------------------------------
+    // Las velocidades se guardan en coordenadas del MUNDO: medirlas en el
+    // espacio del padre haría que una luna agarrada heredara la velocidad
+    // orbital de su planeta (3,8 m/s para la Tierra a 100x) y saliera
+    // disparada al soltarla.
+    this.throwVelocity = new THREE.Vector3();   // velocidad de vuelo
+    this.grabVelocity = new THREE.Vector3();    // velocidad suavizada de la mano
+    this.grabPeakVelocity = new THREE.Vector3();
+    this.throwElapsed = 0;
+    this.prevWorld = new THREE.Vector3();       // posición del frame anterior (barrido)
+    this._handWorld = new THREE.Vector3();
+    this._prevHandWorld = new THREE.Vector3();
+    this._hasPrevHand = false;
 
     this._applyScale();
     if (this.kind === 'moon' && this.parentBody) this.updateSatelliteRadius();
@@ -297,7 +322,37 @@ export class CelestialBody {
   /** Fija / suelta el cuerpo en el punto donde está ahora mismo. */
   setPinned(v) {
     this.pinned = !!v;
-    if (this.pinned) this.pinnedPosition.copy(this.displayPosition);
+    if (this.pinned) {
+      // Se fija donde se VE, incluido cualquier desplazamiento por choque
+      this.pinnedPosition.copy(this.displayPosition).add(this.collisionOffset);
+      this.collisionOffset.set(0, 0, 0);
+    }
+  }
+
+  /**
+   * Aplica la corrección de un choque, expresada en coordenadas del MUNDO.
+   * Se convierte al espacio local del padre (las lunas cuelgan de su planeta)
+   * usando sólo la parte de rotación/escala de su matriz.
+   *
+   * Un cuerpo agarrado se corrige directamente en su posición (el suavizado
+   * del agarre lo vuelve a llevar hacia la mano); el resto acumula el
+   * desplazamiento transitorio, que después se relaja solo.
+   */
+  applyCollisionCorrection(worldDelta) {
+    _v2.copy(worldDelta);
+    const parent = this.root.parent;
+    if (parent) {
+      _m3.setFromMatrix4(parent.matrixWorld).invert();
+      _v2.applyMatrix3(_m3);
+    }
+    if (this.state === BODY_STATE.GRABBED || this.state === BODY_STATE.THROWN) {
+      this.displayPosition.add(_v2);
+    } else {
+      this.collisionOffset.add(_v2);
+      const max = CONFIG.COLLIDERS.MAX_OFFSET;
+      if (this.collisionOffset.lengthSq() > max * max) this.collisionOffset.setLength(max);
+    }
+    this.root.position.copy(this.displayPosition).add(this.collisionOffset);
   }
   setUserScale(s) {
     this.userScale = THREE.MathUtils.clamp(
@@ -306,7 +361,10 @@ export class CelestialBody {
     this._applyScale();
   }
 
-  /** Radio efectivo en el mundo, usado por la detección de contacto. */
+  /**
+   * Radio efectivo en el mundo. Es también el radio de su collider: coincide
+   * exactamente con el tamaño del astro que se ve (v2.3).
+   */
   get worldRadius() {
     return this.baseRadius * this.visualScale;
   }
@@ -325,6 +383,9 @@ export class CelestialBody {
    * @param {number} simDays   tiempo simulado total en días (determinista)
    */
   update(dtReal, dtSimDays, simDays) {
+    // Posición del frame anterior, para el barrido de colisiones en vuelo
+    if (this.state === BODY_STATE.THROWN) this.root.getWorldPosition(this.prevWorld);
+
     // 1) Posición orbital teórica (siempre se calcula, incluso si está agarrado,
     //    porque es el objetivo al que debe volver).
     if (this.pinned) {
@@ -350,6 +411,19 @@ export class CelestialBody {
         // Sigue a la mano con suavizado exponencial (estable, sin vibración)
         const k = dampFactor(CONFIG.INTERACTION.GRAB_TAU, dtReal);
         this.displayPosition.lerp(this.grabTarget, k);
+        this._measureHandVelocity(dtReal);
+        break;
+      }
+      case BODY_STATE.THROWN: {
+        const T = CONFIG.THROW;
+        this.throwElapsed += dtReal;
+        this.throwVelocity.multiplyScalar(1 - dampFactor(T.DRAG_TAU, dtReal));
+        this._worldDirToParent(this.throwVelocity, _v1);
+        this.displayPosition.addScaledVector(_v1, dtReal);
+
+        const detenido = this.throwVelocity.lengthSq() < T.STOP_SPEED * T.STOP_SPEED;
+        const lejos = this.displayPosition.distanceToSquared(this.orbitPosition) > T.MAX_DISTANCE * T.MAX_DISTANCE;
+        if (detenido || lejos || this.throwElapsed > T.MAX_TIME) this.recall();
         break;
       }
       case BODY_STATE.RETURNING: {
@@ -377,7 +451,15 @@ export class CelestialBody {
         this.displayPosition.copy(this.orbitPosition);
         break;
     }
-    this.root.position.copy(this.displayPosition);
+    // 2b) Desplazamiento por choques: se relaja hacia cero con el tiempo real.
+    //     Un cuerpo agarrado o en vuelo no lo acumula (lo corrige directamente).
+    if (this.state === BODY_STATE.GRABBED || this.state === BODY_STATE.THROWN) {
+      this.collisionOffset.set(0, 0, 0);
+    } else if (this.collisionOffset.lengthSq() > 0) {
+      this.collisionOffset.multiplyScalar(1 - dampFactor(CONFIG.COLLIDERS.OFFSET_TAU, dtReal));
+      if (this.collisionOffset.lengthSq() < 1e-10) this.collisionOffset.set(0, 0, 0);
+    }
+    this.root.position.copy(this.displayPosition).add(this.collisionOffset);
 
     // 3) Rotación: congelada mientras se toca o se agarra (req. §7)
     const frozen = this.state === BODY_STATE.TOUCHED || this.state === BODY_STATE.GRABBED;
@@ -391,8 +473,12 @@ export class CelestialBody {
     this.spin.rotation.y = this.spinAngle;
 
     // 4) Realce visual
+    // Graduado: agarrado > pinza lista para agarrarlo > simplemente tocado.
+    // El nivel "armado" es la confirmación visual de QUÉ cuerpo se va a
+    // agarrar si se pellizca ahora mismo.
     const targetHi = (this.state === BODY_STATE.GRABBED) ? 1
-      : (this.state === BODY_STATE.TOUCHED) ? 0.6 : 0;
+      : this.armed ? 0.65
+        : (this.state === BODY_STATE.TOUCHED) ? 0.25 : 0;
     this.highlight += (targetHi - this.highlight) * dampFactor(0.12, dtReal);
     this.highlightShell.material.opacity = this.highlight * 0.45;
     this.highlightShell.visible = this.highlight > 0.01;
@@ -413,21 +499,124 @@ export class CelestialBody {
 
   /** @param {THREE.Vector3} handWorldPos punto de agarre en el mundo */
   beginGrab(handWorldPos) {
+    // Si venía desplazado por un choque, ese desplazamiento pasa a formar parte
+    // de su posición: así no pega un salto al agarrarlo.
+    this.displayPosition.add(this.collisionOffset);
+    this.collisionOffset.set(0, 0, 0);
     this.state = BODY_STATE.GRABBED;
     // Offset para que el planeta no salte al centro de la mano
     this.grabOffset.copy(this.displayPosition).sub(this._toLocal(handWorldPos, _v1));
     this.grabTarget.copy(this.displayPosition);
+    // Atraparlo en pleno vuelo lo detiene; la medida de velocidad empieza de cero
+    this.throwVelocity.set(0, 0, 0);
+    this.grabVelocity.set(0, 0, 0);
+    this.grabPeakVelocity.set(0, 0, 0);
+    this._handWorld.copy(handWorldPos);
+    this._hasPrevHand = false;
   }
 
   /** @param {THREE.Vector3} handWorldPos */
   updateGrab(handWorldPos) {
+    this._handWorld.copy(handWorldPos);
     this.grabTarget.copy(this._toLocal(handWorldPos, _v1)).add(this.grabOffset);
   }
 
-  release() {
-    if (this.state !== BODY_STATE.GRABBED) return;
+  /**
+   * Velocidad de la mano que lo sujeta, en el mundo. Se guarda también un PICO
+   * que decae despacio: para soltar hay que abrir los dedos, y en esos
+   * milisegundos la mano ya se está frenando; sin el pico, un lanzamiento
+   * enérgico saldría flojo.
+   */
+  _measureHandVelocity(dtReal) {
+    if (dtReal <= 0) return;
+    const T = CONFIG.THROW;
+    if (this._hasPrevHand) {
+      _v2.subVectors(this._handWorld, this._prevHandWorld).divideScalar(dtReal);
+      // Un salto imposible (cambio de mano, recentrado) no es un movimiento real
+      if (_v2.lengthSq() < 64) this.grabVelocity.lerp(_v2, dampFactor(T.VELOCITY_TAU, dtReal));
+    }
+    this._prevHandWorld.copy(this._handWorld);
+    this._hasPrevHand = true;
+
+    if (this.grabVelocity.lengthSq() >= this.grabPeakVelocity.lengthSq()) {
+      this.grabPeakVelocity.copy(this.grabVelocity);
+    } else {
+      this.grabPeakVelocity.lerp(this.grabVelocity, dampFactor(T.PEAK_TAU, dtReal));
+    }
+  }
+
+  /**
+   * Suelta el cuerpo. Si la mano se movía lo bastante rápido, sale lanzado.
+   * @param {{allowThrow?: boolean}} opts  false al soltar desde el menú o al
+   *        reiniciar: ahí nadie quiere que salga disparado.
+   * @returns {boolean} true si se lanzó
+   */
+  release({ allowThrow = true } = {}) {
+    if (this.state !== BODY_STATE.GRABBED) return false;
+    const T = CONFIG.THROW;
+    if (allowThrow && this.grabPeakVelocity.lengthSq() > T.MIN_SPEED * T.MIN_SPEED) {
+      this.startThrow(this.grabPeakVelocity);
+      return true;
+    }
     this.state = BODY_STATE.RETURNING;
     this.returnElapsed = 0;
+    return false;
+  }
+
+  /** @param {THREE.Vector3} worldVelocity */
+  startThrow(worldVelocity) {
+    // Igual que al agarrarlo: el desplazamiento de un choque pasa a su posición
+    this.displayPosition.add(this.collisionOffset);
+    this.collisionOffset.set(0, 0, 0);
+    this.throwVelocity.copy(worldVelocity);
+    const max = CONFIG.THROW.MAX_SPEED;
+    if (this.throwVelocity.lengthSq() > max * max) this.throwVelocity.setLength(max);
+    this.state = BODY_STATE.THROWN;
+    this.throwElapsed = 0;
+    this.root.getWorldPosition(this.prevWorld);
+  }
+
+  /**
+   * Cambio de velocidad producido por un choque (coordenadas del mundo).
+   * Un cuerpo agarrado no lo nota; uno en vuelo lo suma; uno quieto sólo sale
+   * despedido si el golpe es fuerte, y si no lo aparta el desplazamiento.
+   */
+  applyImpulse(deltaV) {
+    if (this.state === BODY_STATE.GRABBED) return;
+    if (this.state === BODY_STATE.THROWN) {
+      this.throwVelocity.add(deltaV);
+      const max = CONFIG.THROW.MAX_SPEED;
+      if (this.throwVelocity.lengthSq() > max * max) this.throwVelocity.setLength(max);
+      return;
+    }
+    const kick = CONFIG.THROW.KICK_MIN_SPEED;
+    if (deltaV.lengthSq() >= kick * kick) this.startThrow(deltaV);
+  }
+
+  /** Velocidad en el mundo que cuenta para los choques. */
+  worldVelocity(out) {
+    if (this.state === BODY_STATE.THROWN) return out.copy(this.throwVelocity);
+    if (this.state === BODY_STATE.GRABBED) return out.copy(this.grabVelocity);
+    return out.set(0, 0, 0);
+  }
+
+  /** Termina un vuelo: vuelve suavemente a su órbita. */
+  recall() {
+    if (this.state !== BODY_STATE.THROWN) return;
+    this.throwVelocity.set(0, 0, 0);
+    this.state = BODY_STATE.RETURNING;
+    this.returnElapsed = 0;
+  }
+
+  /** Dirección del mundo -> espacio del padre (sólo rotación y escala). */
+  _worldDirToParent(worldVec, out) {
+    out.copy(worldVec);
+    const parent = this.root.parent;
+    if (parent) {
+      _m3.setFromMatrix4(parent.matrixWorld).invert();
+      out.applyMatrix3(_m3);
+    }
+    return out;
   }
 
   /** Convierte un punto del mundo al espacio local del padre del cuerpo. */
@@ -443,6 +632,9 @@ export class CelestialBody {
     this.returnElapsed = 0;
     this.rotationBlend = 1;
     this.displayPosition.copy(this.orbitPosition);
+    this.collisionOffset.set(0, 0, 0);
+    this.throwVelocity.set(0, 0, 0);
+    this.armed = false;
     this.root.position.copy(this.orbitPosition);
     if (resetScale) { this.userScale = 1; this._applyScale(); }
   }

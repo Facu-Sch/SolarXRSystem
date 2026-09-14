@@ -18,7 +18,7 @@
 import { CanvasPanel } from './CanvasPanel.js';
 
 const W = 1024;
-const H = 800;
+const H = 1026;
 const PAD = 26;
 
 export class SpatialMenu extends CanvasPanel {
@@ -36,6 +36,13 @@ export class SpatialMenu extends CanvasPanel {
       showStars: true,
       allMoons: false,
       audioOn: true,
+      collisionsOn: true,
+      collidersVisible: false,
+      impactSoundOn: true,
+      compareOn: false,
+      musicSteps: [0, 0.25, 0.5, 0.75, 1],
+      musicIndex: 2,
+      musicStatus: 'cargando',
       scales: [0.5, 1, 1.5, 2.5],
       scaleIndex: 1,
       orbitScales: [1, 1.5, 2, 3],
@@ -114,57 +121,87 @@ export class SpatialMenu extends CanvasPanel {
     // ---- Fila 3: visualización ---------------------------------------------
     this._sectionTitle('Visualización', PAD + 4, 322);
     const rowY3 = 340;
-    const bw3 = (W - PAD * 2 - 14 * 5) / 6;
+    // (el botón Sonido pasó a su propia fila, "Música de fondo", con volumen)
+    const bw3 = (W - PAD * 2 - 14 * 4) / 5;
     const toggles = [
       { id: 'toggle-orbits', label: 'Órbitas', sub: s.showOrbits ? 'visibles' : 'ocultas', on: s.showOrbits },
       { id: 'toggle-labels', label: 'Nombres', sub: s.showLabels ? 'visibles' : 'ocultos', on: s.showLabels },
       { id: 'toggle-info', label: 'Fichas', sub: s.showInfo ? 'activas' : 'off', on: s.showInfo },
       { id: 'toggle-stars', label: 'Estrellas', sub: s.showStars ? 'visibles' : 'ocultas', on: s.showStars },
-      { id: 'toggle-moons', label: 'Lunas', sub: s.allMoons ? 'todas' : 'sólo la Luna', on: s.allMoons },
-      { id: 'toggle-audio', label: 'Sonido', sub: s.audioOn ? 'activado' : 'silencio', on: s.audioOn }
+      { id: 'toggle-moons', label: 'Lunas', sub: s.allMoons ? 'todas' : 'sólo la Luna', on: s.allMoons }
     ];
     toggles.forEach((t, i) => {
       this._button({
         id: t.id, x: PAD + i * (bw3 + 14), y: rowY3, w: bw3, h: 76,
+        label: t.label, sub: t.sub, active: t.on, fontSize: 24
+      });
+    });
+
+    // ---- Fila 4: física (v2.0) ----------------------------------------------
+    this._sectionTitle('Física y comparación', PAD + 4, 458);
+    const rowY4 = 476;
+    const bw4 = (W - PAD * 2 - 14 * 3) / 4;
+    const fisica = [
+      { id: 'toggle-collisions', label: 'Colisiones', sub: s.collisionsOn ? 'activadas' : 'desactivadas', on: s.collisionsOn },
+      { id: 'toggle-colliders', label: 'Ver colliders', sub: s.collidersVisible ? 'visibles' : 'ocultos', on: s.collidersVisible },
+      { id: 'toggle-impact-sound', label: 'Sonido choques', sub: s.impactSoundOn ? 'activado' : 'silencio', on: s.impactSoundOn },
+      { id: 'toggle-compare', label: 'Comparar tamaños', sub: s.compareOn ? 'pellizcá 2 cuerpos' : 'desactivado', on: s.compareOn }
+    ];
+    fisica.forEach((t, i) => {
+      this._button({
+        id: t.id, x: PAD + i * (bw4 + 14), y: rowY4, w: bw4, h: 70,
         label: t.label, sub: t.sub, active: t.on, fontSize: 23
       });
     });
 
-    // ---- Fila 4: escala de los cuerpos -------------------------------------
-    this._sectionTitle('Tamaño de los cuerpos', PAD + 4, 458);
-    const rowY4 = 476;
-    const n4 = s.scales.length;
-    const bw4 = (W - PAD * 2 - 18 * (n4 - 1)) / n4;
+    // ---- Fila 5: música de fondo (v2.2) -------------------------------------
+    this._sectionTitle(`Música de fondo · ${s.musicStatus}`, PAD + 4, 574);
+    const rowYm = 592;
+    const nm = s.musicSteps.length;
+    const bwm = (W - PAD * 2 - 18 * (nm - 1)) / nm;
+    s.musicSteps.forEach((lv, i) => {
+      this._button({
+        id: `music-${i}`, x: PAD + i * (bwm + 18), y: rowYm, w: bwm, h: 70,
+        label: lv === 0 ? 'Silencio' : `${Math.round(lv * 100)} %`,
+        active: i === s.musicIndex, fontSize: 30
+      });
+    });
+
+    // ---- Fila 6: escala de los cuerpos -------------------------------------
+    this._sectionTitle('Tamaño de los cuerpos', PAD + 4, 690);
+    const rowY5 = 708;
+    const n5 = s.scales.length;
+    const bw5 = (W - PAD * 2 - 18 * (n5 - 1)) / n5;
     s.scales.forEach((sc, i) => {
       this._button({
-        id: `scale-${i}`, x: PAD + i * (bw4 + 18), y: rowY4, w: bw4, h: 70,
+        id: `scale-${i}`, x: PAD + i * (bw5 + 18), y: rowY5, w: bw5, h: 70,
         label: `${this._fmt(sc)}x`, active: i === s.scaleIndex, fontSize: 30
       });
     });
 
-    // ---- Fila 5: escala de las órbitas -------------------------------------
+    // ---- Fila 6: separación de las órbitas ---------------------------------
     // Independiente de la anterior: al agrandar los cuerpos, separar las
     // órbitas evita que los planetas se solapen entre ellos.
-    this._sectionTitle('Separación de las órbitas', PAD + 4, 574);
-    const rowY5 = 592;
-    const n5 = s.orbitScales.length;
-    const bw5 = (W - PAD * 2 - 18 * (n5 - 1)) / n5;
+    this._sectionTitle('Separación de las órbitas', PAD + 4, 806);
+    const rowY6 = 824;
+    const n6 = s.orbitScales.length;
+    const bw6 = (W - PAD * 2 - 18 * (n6 - 1)) / n6;
     s.orbitScales.forEach((sc, i) => {
       this._button({
-        id: `orbit-${i}`, x: PAD + i * (bw5 + 18), y: rowY5, w: bw5, h: 70,
+        id: `orbit-${i}`, x: PAD + i * (bw6 + 18), y: rowY6, w: bw6, h: 70,
         label: `${this._fmt(sc)}x`, active: i === s.orbitScaleIndex, fontSize: 30
       });
     });
 
-    // ---- Fila 6: recentrar / cerrar ----------------------------------------
-    const rowY6 = 700;
-    const bw6 = (W - PAD * 2 - 24) / 2;
+    // ---- Fila 7: recentrar / cerrar ----------------------------------------
+    const rowY7 = 932;
+    const bw7 = (W - PAD * 2 - 24) / 2;
     this._button({
-      id: 'recenter', x: PAD, y: rowY6, w: bw6, h: 68,
+      id: 'recenter', x: PAD, y: rowY7, w: bw7, h: 68,
       label: 'Recentrar sistema', fontSize: 28
     });
     this._button({
-      id: 'close', x: PAD + bw6 + 24, y: rowY6, w: bw6, h: 68,
+      id: 'close', x: PAD + bw7 + 24, y: rowY7, w: bw7, h: 68,
       label: 'Cerrar menú', fontSize: 28
     });
 

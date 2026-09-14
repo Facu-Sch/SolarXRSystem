@@ -1,5 +1,7 @@
 # Sistema Solar en Realidad Mixta
 
+**Versión 2.4.1** · [Registro de cambios](CHANGELOG.md)
+
 Una demo de **realidad mixta para Meta Quest 3**: el Sistema Solar aparece flotando en tu
 habitación real y lo manipulás **con las manos**, sin mandos. Podés tocar un planeta para
 frenar su rotación, agarrarlo y moverlo, agrandarlo separando las dos manos, abrir un menú
@@ -37,32 +39,39 @@ música de fondo.
 
 | Acción | Gesto |
 |---|---|
-| **Seleccionar** un cuerpo y ver su ficha | Tocarlo con la mano (0,2 s de contacto) |
-| **Frenar su rotación** | Basta con tocarlo y mantener la mano encima |
-| **Agarrarlo y moverlo** | Pellizcar (índice + pulgar) sobre él, o envolverlo con la mano |
-| **Devolverlo a su órbita** | Soltar: vuelve solo, suavemente |
+| **Frenar su rotación** | Tocarlo y mantener la mano encima |
+| **Agarrarlo y ver su ficha** | **Pellizcar** (índice + pulgar) con la pinza sobre él — se ilumina cuando está en posición |
+| **Moverlo sin abrir la ficha** | Envolverlo con la mano |
+| **Devolverlo a su órbita** | Soltar con la mano quieta: vuelve solo, suavemente |
+| **Lanzarlo** | Soltarlo **con la mano en movimiento**: cuanto más rápido, más lejos llega; choca con lo que encuentre y después vuelve |
+| **Atraparlo en el aire** | Pellizcarlo mientras vuela |
 | **Agrandarlo / achicarlo** | Agarrarlo **con las dos manos** y separarlas o juntarlas |
 | **Abrir el menú** | **Palma derecha abierta mirando hacia arriba**, ~0,3 s |
 | **Pulsar un botón** | Atravesarlo con la yema del índice |
 
 La ficha de cada cuerpo tiene sus propios botones: **A −** / **A +** para cambiarle el
-tamaño, **Lado** para pasarla al otro lado del planeta, **Fijar** para que el cuerpo deje de
+tamaño, **Mover** para pasarla de arriba del planeta a su derecha o a su izquierda, **Fijar** para que el cuerpo deje de
 avanzar por su órbita y se quede quieto mientras lo mirás, y **Cerrar**.
 
 ### Desde el menú
 
 - **Play / pausa** y **velocidad**: 0,1× · 0,5× · 1× · 5× · 10× · 100×
 - **Reiniciar** todo, o solo **devolver a su órbita** los planetas que moviste
-- Mostrar u ocultar **órbitas, nombres, fichas, estrellas** y el **sonido** de fondo
+- Mostrar u ocultar **órbitas, nombres, fichas y estrellas**
+- **Música de fondo**: silencio · 25 % · 50 % · 75 % · 100 %, con su estado al lado del título
+  («sonando», «esperando un toque», «error»…)
 - **Lunas**: solo la Luna, o las **27 lunas principales** del Sistema Solar
 - **Tamaño de los cuerpos**: 0,5× · 1× · 1,5× · 2,5×
 - **Separación de las órbitas**: 1× · 1,5× · 2× · 2,5×
+- **Física y comparación**: activar o desactivar los choques entre planetas, mostrar sus
+  colliders, silenciar el **sonido de los choques** y entrar en **Comparar tamaños**, que
+  muestra dos cuerpos con su proporción real (§2.12)
 - **Recentrar** el sistema alrededor de donde estés mirando
 
 ### En la computadora, sin visor
 
 Se puede recorrer la escena con el ratón para comprobar la simulación. **Las fichas de los
-cuerpos no se abren desde el escritorio**: eso es exclusivo del visor (ver §2.10).
+cuerpos no se abren desde el escritorio**: eso es exclusivo del visor (ver §2.9).
 
 | Tecla / acción | Efecto |
 |---|---|
@@ -73,6 +82,7 @@ cuerpos no se abren desde el escritorio**: eso es exclusivo del visor (ver §2.1
 | `Espacio` | play / pausa |
 | `R` | reiniciar |
 | `O` / `N` | órbitas / nombres |
+| `C` | modo comparación de tamaños (elegir los cuerpos requiere las manos) |
 
 El panel de estado se recupera con la pastilla **ⓘ Estado y opciones** de la esquina
 superior derecha, y muestra abajo el **sello de compilación** (`versión AAAA-MM-DD hh:mm`).
@@ -110,21 +120,41 @@ WebXR entrega las **25 articulaciones** de cada mano, y nada más: no existen ev
 no parpadee: se cierra por debajo de 28 mm y no se abre hasta pasar los 48 mm.
 
 **Contacto.** Se comparan seis puntos de la mano (las cinco yemas y la palma) contra la
-esfera de cada cuerpo, usando los **radios reales de las articulaciones** que aporta WebXR
-más 18 mm de holgura. No hay colisionadores gigantes: el planeta no reacciona con la mano a
-un palmo de distancia. Cuando varios cuerpos están al alcance gana el de **superficie** más
+esfera de cada cuerpo, usando los **radios reales de las articulaciones** que aporta WebXR y
+**sin holgura** (v2.3): la esfera de cada astro es su collider, del tamaño exacto del astro. Cuando varios cuerpos están al alcance gana el de **superficie** más
 próxima, no el de centro más próximo: comparando centros, una luna diminuta le robaba el
 contacto a su planeta aunque la mano estuviera dentro de éste.
 
-No se dibuja ninguna representación de las manos. En passthrough el usuario ya ve las
-suyas, y superponerles marcadores sólo ensucia la vista y tapa los planetas pequeños justo
-cuando va a agarrarlos.
+No se dibujan las articulaciones: en passthrough el usuario ya ve sus manos, y
+superponerles marcadores tapaba los planetas pequeños. Lo único que se dibuja es el
+**anillo de pinza** (v2.4), en el punto medio entre las yemas del pulgar y del índice. Se
+achica al cerrar los dedos y su color dice qué detecta la aplicación:
 
-**Seleccionar no es lo mismo que tocar.** Tocar es generoso (radio + 18 mm) porque sólo
-congela la rotación, que es inmediato y reversible. Abrir la ficha es más exigente: la yema
-tiene que estar **dentro** de la esfera del cuerpo —no en el margen— y mantenerse ahí 0,40 s.
-Sin esa distinción, al llevar la mano hacia un planeta se rozaban por el camino todos los
-que quedaban de paso y la ficha iba saltando de uno a otro hasta llegar al destino.
+| Anillo | Significa |
+|---|---|
+| blanco | la mano no toca ningún collider |
+| amarillo, con un nombre | toca el collider de ese astro: si pellizcás ahora, se agarra ése |
+| cian, con un nombre | astro agarrado |
+| rojo, «sin contacto» | cerraste la pinza sin tocar ningún astro |
+
+El rojo hace visible un pellizco que no tocó nada. Con el collider exacto, pellizcar un
+planeta con las yemas apenas por fuera de su superficie no lo agarra. Medido: con las yemas
+justo tocando la superficie se detectan los 9 planetas; un 10 % más afuera, ninguno.
+
+Los últimos 20 pellizcos quedan registrados con los tres astros más cercanos y su puntaje
+(distancia / suma de radios; menor que 1 es contacto), para revisarlos desde la consola
+remota del Quest: `__solarApp.interaction.pinchLog`.
+
+**Tocar, apuntar y agarrar son tres cosas distintas** (v2.0):
+
+- **Tocar**: una yema o la palma se superpone con el collider del astro. Congela la
+  rotación y **no** abre la ficha.
+- **Apuntar**: cuando la yema del pulgar, la del índice o el punto entre ambas tocan el
+  collider de un astro, éste se ilumina. Es la confirmación de cuál vas a agarrar *antes* de
+  pellizcar.
+- **Agarrar y abrir la ficha** exige colisión y pinza **en el mismo instante**: la pinza se
+  evalúa una sola vez, en el frame en que se cierra. Si se cierra en el vacío queda gastada,
+  y arrastrarla después hacia un planeta —o a través de uno— no agarra nada. Ver §2.11.
 
 **Agarre.** Con pellizco, o "a mano llena" envolviendo el cuerpo — para esto último hacen
 falta al menos 3 yemas **estrictamente dentro** de la esfera y la mano cerrándose. Es
@@ -288,8 +318,18 @@ siguiera la palma habría que pulsar sus botones con la otra mano mientras se ma
 primera perfectamente quieta. Anclado, bajás la mano y pulsás cómodo. Se cierra con su botón
 o solo, a los 8 s sin gesto ni manos cerca.
 
-La **ficha** aparece al lado del cuerpo, del lado que quede hacia el centro de tu campo
-visual, y se redimensiona desde sus propios botones.
+La **ficha** aparece **arriba de su planeta**, justo sobre el nombre, así queda claro a qué
+astro corresponde (v2.3). Desde sus propios botones se redimensiona y, con **Mover**, pasa a
+la derecha o a la izquierda del planeta.
+
+**El lienzo de la ficha nunca cambia de tamaño** (v2.4). Cada ficha tiene una altura
+distinta (la de la Tierra incluye la Luna; la de una luna es corta), pero Three.js reserva
+la textura en la GPU con el tamaño de la primera subida y no la redimensiona. Cuando el
+lienzo se ajustaba a cada ficha, las más altas que la primera abierta no llegaban a la GPU:
+los planetas mostraban la ficha del Sol con restos de otras encima, y las lunas, más cortas,
+se veían bien. Ahora el lienzo tiene siempre la altura máxima y la altura de cada ficha se
+ajusta recortando la textura y el plano 3D. Verificado comparando píxel a píxel lo que
+dibuja la GPU con el lienzo, abriendo las fichas en cualquier orden.
 
 ### 2.8 Las texturas
 
@@ -304,7 +344,7 @@ solo megabyte de assets binarios, no hace peticiones de red y no tiene problemas
 de licencias. Si preferís texturas reales, dejá los ficheros equirectangulares en
 `public/textures/` y rellená `OVERRIDE_URLS` en `src/systems/ProceduralTextures.js`.
 
-### 2.10 Por qué en escritorio no se seleccionan cuerpos
+### 2.9 Por qué en escritorio no se seleccionan cuerpos
 
 La vista de escritorio sirve para **observar** la escena y comprobar la simulación, no para
 interactuar: no hay selección con el ratón. Es una decisión, no un olvido, y vale la pena
@@ -323,7 +363,7 @@ nada que no se pueda leer dentro del visor, que es donde la demo está pensada p
 Lo que sí queda en escritorio: cámara orbital, zoom, el menú espacial con `M` y los demás
 atajos de teclado.
 
-### 2.9 Ambientación: logos en el suelo y sonido
+### 2.10 Ambientación: logos en el suelo y sonido
 
 Dos **logos institucionales** (GTI FIUNER y Facultad de Ingeniería de la UNER) se apoyan
 en el suelo real de la habitación, por delante del usuario. Se colocan al recentrar la
@@ -349,21 +389,159 @@ los blancos legítimos del propio logo — los reflejos de las gafas o los hueco
 engranaje.
 
 El **sonido ambiental** (`public/audio/ambient-neptune.mp3`, 12 minutos, mono 32 kbps,
-2,8 MB) suena en bucle continuo. Se
-reproduce con un `<audio>` del DOM y no con `THREE.Audio`, porque es un fondo constante y
-no un sonido situado en un punto: así se evita el coste de la espacialización y de
-mantener un `AudioListener` pegado a la cámara XR.
+2,8 MB) suena en bucle continuo, sin espacializar: es un fondo constante y no un sonido
+situado en un punto.
 
-Los navegadores no permiten reproducir audio sin una interacción previa del usuario, así
-que no se intenta al cargar la página: arranca al primer clic, tecla o al entrar en la
-sesión XR, con un fundido de 1,6 s. Si el navegador aun así lo rechaza, se reintenta en la
-siguiente interacción en lugar de fallar en silencio. Se silencia desde el botón
-**Sonido** del menú.
+**Web Audio (v2.4.1).** El mp3 se descarga, se decodifica en memoria y suena con un
+`AudioBufferSourceNode` en bucle, con un `GainNode` para el volumen y los fundidos. Comparte
+un único `AudioContext` con el sonido de los choques (`AudioEngine.js`).
 
-El service worker **no cachea** el audio: los navegadores lo piden por rangos (peticiones
-`Range`, respuestas 206) y esas respuestas no se pueden guardar en la Cache API. Eso
-significa que el sonido es lo único que necesita conexión; el resto de la demo funciona
-sin red.
+Hasta la 2.4 se usaba un `<audio>` del DOM, y en el Quest la música no sonaba dentro de la
+sesión inmersiva. Un elemento multimedia depende de gestos sobre la página para arrancar y
+el navegador lo puede pausar al pasar la página a segundo plano; dentro de la sesión ya no
+hay gestos del DOM para reactivarlo. Un `AudioContext` se activa **una vez**, con el clic en
+«Entrar en Realidad Mixta», y sigue funcionando en la sesión: la música arranca sola en
+cuanto termina de decodificarse.
+
+El contexto trabaja a **24 kHz**, la frecuencia del archivo, para que la música decodificada
+ocupe 66,7 MB (12 min 8 s, mono) y no el doble. Los choques se sintetizan por debajo de
+6 kHz, así que no pierden nada.
+
+Los navegadores no dejan activar el audio sin una interacción previa del usuario: el
+contexto se activa con el primer clic, tecla o al entrar en la sesión XR, y la música entra
+con un fundido de 1,6 s. Si el navegador lo suspende, se reintenta cada segundo, y la música
+vuelve sola en cuanto el contexto se reactiva. El estado («cargando», «decodificando»,
+«esperando un toque», «sonando», «silenciada» o «error») se muestra en el panel de inicio
+y junto al título de la fila **Música de fondo** del menú.
+
+El **volumen** se elige en el menú: silencio, 25 %, 50 %, 75 % o 100 %. El volumen real
+es nivel^1,5, porque el oído percibe el volumen de forma logarítmica: 50 % equivale a 0,35,
+el valor fijo que tenía antes.
+
+El service worker **no cachea** el audio. Eso significa que el sonido es lo único que necesita conexión; el resto
+de la demo funciona sin red.
+
+### 2.11 Colliders y choques entre planetas (v2.0)
+
+Cada astro tiene **un collider esférico del tamaño exacto del astro** (v2.3). Sirve para los
+choques entre planetas y para detectar qué astro toca la mano.
+
+**Detección por contacto mano–collider.** El collider de la mano son tres esferas: la yema
+del índice y la del pulgar (con el radio real de la articulación que da WebXR) y el punto
+medio de la pinza. En el instante en que se cierra la pinza, se agarra el astro cuyo collider
+se superpone con alguna de ellas, y se abre su ficha. Si toca dos a la vez, gana el más
+«hundido» (menor distancia al centro relativa a la suma de radios).
+
+Hasta la 2.2 había además un collider de agarre mayor que el astro (mínimo 2,5 cm más 8 mm).
+Se quitó: con la Luna a 7,8 cm de la Tierra, las zonas ampliadas de cuerpos vecinos casi se
+tocaban y la mano podía seleccionar un astro que no estaba tocando. Tampoco hay tolerancia
+temporal: se probó una ventana de gracia de 150 ms y se descartó tras medirla, porque una
+pinza cerrada que atravesaba la Luna a 0,58 m/s la capturaba a los 42 ms.
+
+**Cómo conviven los choques con Kepler.** No hay integración de velocidades ni fuerzas: la
+órbita sigue siendo una función cerrada y determinista del tiempo simulado. Un choque sólo
+suma a cada cuerpo un **desplazamiento transitorio** que lo saca del otro, y ese
+desplazamiento se relaja solo en ~0,3 s. Así los planetas se empujan de verdad al chocar,
+pero en cuanto dejan de tocarse vuelven a su posición orbital exacta — medido: error nulo
+tras soltar.
+
+**Quién se mueve.** Un cuerpo agarrado tiene autoridad y empuja a los demás. Entre cuerpos
+libres se aparta más el de menor masa visual (radio al cubo), así que una luna que choca
+con el Sol sale despedida y el Sol apenas se inmuta, sin necesidad de un caso especial.
+
+**Quién choca.** Sólo los cuerpos **en interacción**: agarrados, volviendo a su órbita, o
+ya desplazados por otro choque —esto último es lo que permite las cadenas: la Tierra
+agarrada empuja a Marte y Marte, ya desplazado, empuja al siguiente—. Dos cuerpos que
+simplemente siguen su órbita se atraviesan, y no es un olvido: por la compresión de escala
+la órbita de la Luna invade los carriles de Venus y Marte, y sin esta regla chocaban solos
+durante la simulación normal (medido: Luna-Venus con 24 mm de penetración y Luna-Marte con
+19 mm en 25.000 días simulados). No tiene arreglo geométrico: para no tocar a Venus, la Luna
+tendría que orbitar dentro de la Tierra.
+
+La resolución es de tipo Jacobi, en 3 iteraciones por frame: todas las correcciones de una
+pasada se calculan con las mismas posiciones de partida y se aplican juntas, así el
+resultado no depende del orden de los cuerpos y los choques en cadena se asienten.
+
+**Verificado con manos simuladas:**
+
+| Escenario | Resultado |
+|---|---|
+| Tocar sin pellizcar | congela la rotación, no abre ficha |
+| Pinza cerrada en el vacío y arrastrada hasta un planeta | no agarra nada |
+| Pinza cerrada dentro del collider | agarra y abre la ficha |
+| Recorrer el sistema hasta Saturno sin pellizcar | ninguna ficha en el camino |
+| Pinza cerrada atravesando la Luna a 0,58 m/s | no la captura |
+| Escala con dos manos | 1× → 2,5× |
+| Empujar la Tierra contra Marte | 0 mm de penetración, Marte apartado 4,1 cm |
+| Soltar | ambos vuelven a su órbita con error nulo |
+| Choque en cadena sobre un cuerpo en reposo | lo aparta, 0 mm de penetración residual |
+| 20.833 días a 100× sin tocar nada | 0 choques resueltos |
+
+El menú tiene una fila **Física** para desactivar los choques y para **ver los colliders**
+(verde libre, amarillo pinza en posición, rojo en choque, cian agarrado), útil tanto para
+depurar como para explicar qué está pasando.
+
+### 2.12 Lanzar planetas, sonido de choques, fecha y comparación (v2.1)
+
+**Lanzar.** Mientras un cuerpo está agarrado se mide la velocidad de la mano (suavizada con
+τ = 35 ms) y se guarda un **pico** que decae despacio. Hace falta porque abrir los dedos para
+soltar lleva unos milisegundos en los que la mano ya se está frenando: sin el pico, un
+lanzamiento enérgico saldría flojo. Si al soltar el pico supera **0,55 m/s**, el cuerpo pasa a
+un estado nuevo, `THROWN`. Vuela con esa velocidad (máximo 2 m/s) y se frena solo
+(τ = 0,75 s). Cuando baja de 0,07 m/s, pasan 3 s o se aleja 2,5 m, vuelve a su órbita como
+cualquier cuerpo soltado. Se puede **atrapar en el aire** con otra pinza. «Soltar planetas» y
+«Reiniciar» nunca lanzan: devuelven todo, incluido lo que esté volando.
+
+En la 2.2 se probó una vuelta en «mini órbita» (un bucle tipo bumerán alrededor de su lugar
+en la órbita) y se descartó tras probarla en el visor.
+
+La velocidad se mide en coordenadas del **mundo** y no respecto del padre por un motivo
+concreto. Si se midiera respecto del planeta, una luna agarrada heredaría la velocidad orbital
+de este (3,8 m/s para la Tierra a 100×) y saldría disparada aunque se la soltara quieta.
+
+**Choques con velocidad.** Sobre la resolución por desplazamientos de la 2.0 se suma un
+**impulso** a lo largo de la normal, con restitución 0,55 y la masa visual (radio al cubo). La
+mano cuenta como masa infinita: no retrocede. Un cuerpo en reposo sólo sale despedido si
+recibe más de 0,25 m/s; con empujones suaves se sigue apartando como en la 2.0.
+
+A 2 m/s y 72 Hz un cuerpo avanza 2,8 cm por frame, más que el diámetro de muchas lunas. Para
+que no atraviese a uno pequeño sin tocarlo, se traza el **segmento recorrido** desde el frame
+anterior contra la esfera de cada cuerpo.
+
+**Sonido.** Se sintetiza con Web Audio, sin archivos, en tres capas: un tono con caída de
+afinación, un parcial inarmónico y un chasquido de ruido filtrado. Cada golpe se coloca con
+HRTF **en el punto del contacto**, así que en el visor suena desde donde ocurre. El volumen
+sigue a la velocidad del impacto y la afinación al tamaño: Júpiter retumba, una luna hace
+«tic». Suena **una vez por contacto nuevo**, no mientras dos cuerpos siguen apoyados. Se
+silencia desde el menú (**Sonido choques**), independiente de la música.
+
+**Fecha simulada.** Flota sobre el Sol y muestra J2000 (1 ene 2000, 12:00) más los días
+simulados, junto con la velocidad o «en pausa». Las posiciones corresponden a esa fecha dentro
+de la precisión del modelo kepleriano. El rótulo se redibuja como mucho 10 veces por segundo:
+a 100× pasan 500 días por segundo y más no se llega a leer.
+
+**Comparar tamaños.** Se activa con el botón **Comparar tamaños** del menú (tecla `C` en la
+PC). Mientras está activo, la pinza no abre la ficha: entrega el cuerpo a la comparación. Esta
+muestra los **dos últimos cuerpos pellizcados** delante del usuario con su **proporción
+verdadera**, el mayor con 20 cm de diámetro, y un panel con los diámetros y los cocientes de
+diámetro y de volumen. Es la respuesta visual a por qué la maqueta comprime los tamaños: junto
+a un Sol de 20 cm, la Tierra mide 1,8 mm. Si el cuerpo pequeño quedara por debajo de 1,6 mm,
+se dibuja con ese mínimo y el panel lo aclara.
+
+**Verificado con manos simuladas** (frames a 72 Hz):
+
+| Escenario | Resultado |
+|---|---|
+| Lanzar la Tierra a 1,2 m/s hacia Venus | sale a 1,16 m/s, choca a 0,98 m/s, Venus despedida a 0,78 m/s, 0 mm de penetración |
+| Después del choque | las dos vuelven a su órbita en 1,3 s, error nulo |
+| Soltar moviendo la mano a 0,25 m/s | no lanza: vuelve a su órbita |
+| Pellizcar un cuerpo en vuelo | queda agarrado y quieto |
+| «Soltar planetas» con un cuerpo en vuelo | vuelve a su órbita |
+| Perder el tracking de la mano mientras se mueve a 1 m/s | sale lanzado a 0,98 m/s en vez de quedar clavado |
+| Marte a 2 m/s contra la Tierra con un frame de 50 ms (10 cm por paso) | no la atraviesa: se detiene en 4,1 cm, la suma de radios, y la despide |
+| 20.833 días a 100× sin tocar nada | 0 choques, 0 sonidos, 0 lanzamientos |
+| Comparar el Sol y la Tierra | diámetro 109 ×, volumen 1,30 millones ×, la Tierra de 1,8 mm, sin abrir la ficha |
+| Síntesis del sonido de choque | se reproduce sin errores |
 
 ---
 
@@ -493,16 +671,23 @@ src/
 │  ├─ SolarSystem.js             ensamblado de la escena
 │  ├─ ProceduralTextures.js      generación de texturas en Canvas 2D
 │  ├─ FloorLogos.js              logos apoyados en el suelo real
-│  └─ AmbientAudio.js            sonido de fondo en bucle
+│  ├─ AudioEngine.js             AudioContext compartido por música y choques (v2.4.1)
+│  ├─ AmbientAudio.js            música de fondo en bucle (Web Audio)
+│  └─ ImpactAudio.js             sonido de los choques, sintetizado (v2.1)
 ├─ interaction/
 │  ├─ HandTracking.js            lectura de las 25 articulaciones por mano
 │  ├─ GestureDetector.js         gesto de palma derecha hacia arriba
 │  └─ PlanetInteraction.js       máquina de estados manos <-> planetas
+├─ physics/
+│  └─ CollisionSystem.js         colliders y choques entre cuerpos (v2.0)
 ├─ ui/
 │  ├─ CanvasPanel.js             base de los paneles espaciales
 │  ├─ SpatialMenu.js             menú de control
 │  ├─ InformationPanel.js        ficha educativa
 │  ├─ SpatialUI.js               orquestación de los paneles y las pulsaciones
+│  ├─ SizeComparison.js          comparación de tamaños a proporción real (v2.1)
+│  ├─ SimDateLabel.js            fecha simulada sobre el Sol (v2.1)
+│  ├─ PinchIndicator.js          anillo de pinza con el astro detectado (v2.4)
 │  └─ Label.js                   etiquetas con los nombres
 ├─ sim/
 │  └─ SimulationControls.js      reloj de simulación (play/pausa/velocidad)
@@ -564,7 +749,7 @@ Cada punto es una limitación **real** encontrada durante el desarrollo, no una 
    debajo de los ojos, y con un billboard sólo horizontal se veía escorzado, "en diagonal".
 
 8. **Un panel flotando junto a un planeta compite con la mano que va a tocarlo.** La ficha se
-   sitúa **al lado** del cuerpo y el test de "mano ocupada con la interfaz" usa márgenes muy
+   sitúa **arriba** del cuerpo, por encima de su nombre, y el test de "mano ocupada con la interfaz" usa márgenes muy
    ajustados (2 cm). Este caso se detectó probando y se corrigió.
 
 9. **Al ahuecar la mano derecha bajo un planeta, la palma mira hacia arriba** y el menú se
@@ -591,9 +776,10 @@ Medido en la propia escena, con menú y ficha abiertos:
   usuario. Las lunas ocultas se saltan por completo en la actualización, en la interacción y
   en el render, así que activarlas es lo único que cuesta.
 - Con los dos logos del suelo y el menú abierto: 42 llamadas y ~14.000 triángulos
+- Con los colliders de la 2.0 activos (sin mostrarlos): 40 llamadas y ~14.000 triángulos; mostrarlos suma una línea por cuerpo
 - 18 texturas, 9 programas de shader
 - Esferas de 32×16 (48×24 para Sol, Tierra y Júpiter; 16×8 para las lunas)
-- Sin post-procesado, sin sombras, sin física
+- Sin post-procesado, sin sombras y sin motor de física: los choques son propios (§2.11)
 - `renderer.xr.setFoveation(1.0)` activado
 - Los paneles se redibujan sólo cuando cambia su contenido, nunca por frame
 

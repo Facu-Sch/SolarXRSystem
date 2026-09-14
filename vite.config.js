@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { readFileSync } from 'node:fs';
+
+/** La versión visible en la interfaz sale de package.json: una sola fuente. */
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 /**
  * WebXR exige un contexto seguro (HTTPS o localhost).
@@ -29,7 +33,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './',
-    define: { __BUILD_ID__: JSON.stringify(sello) },
+    define: {
+      __BUILD_ID__: JSON.stringify(sello),
+      __APP_VERSION__: JSON.stringify(version)
+    },
     plugins: useHttps ? [basicSsl()] : [],
     server: {
       host: true,        // escucha en 0.0.0.0 para que el Quest pueda conectarse
